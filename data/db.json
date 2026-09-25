@@ -1,0 +1,144 @@
+{
+  "users": [
+    {
+      "id": "usr-admin-01",
+      "username": "admin",
+      "password": "classified2026",
+      "role": "admin",
+      "clearance": "LEVEL-5 (COMMAND)",
+      "status": "ACTIVE",
+      "mfaSetup": true,
+      "mfaSecret": "A6M7LQ7WJJW2ZBKUPJ2BG4IHFR2PJSMH",
+      "notes": "Master System Administrator - Root Authority",
+      "createdAt": "2026-09-24T00:00:00.000Z",
+      "lastLogin": "2026-09-24T08:05:58.973Z",
+      "inviteCode": "LVO-ROOT-MASTER-KEY"
+    },
+    {
+      "id": "usr-op-01",
+      "username": "operator-01",
+      "password": "cipher-alpha",
+      "role": "operator",
+      "clearance": "LEVEL-3 (CONFIDENTIAL)",
+      "status": "ACTIVE",
+      "mfaSetup": true,
+      "mfaSecret": "G3OJPFFD25BAO3R4ITQPMY4FB4RGMIG6",
+      "notes": "Sector 7 Tunnel Relay Monitor",
+      "createdAt": "2026-09-24T01:15:00.000Z",
+      "lastLogin": "2026-09-24T08:18:53.367Z",
+      "inviteCode": "LVO-INV-ALPHA-8812"
+    },
+    {
+      "id": "usr-op-02",
+      "username": "sentinel-09",
+      "password": "cipher-beta",
+      "role": "operator",
+      "clearance": "LEVEL-2 (RESTRICTED)",
+      "status": "ACTIVE",
+      "mfaSetup": false,
+      "mfaSecret": null,
+      "notes": "Perimeter Security Analyst",
+      "createdAt": "2026-09-24T02:30:00.000Z",
+      "lastLogin": null,
+      "inviteCode": "LVO-INV-BETA-4491"
+    }
+  ],
+  "messages": [
+    {
+      "id": "msg-001",
+      "senderId": "usr-admin-01",
+      "senderUsername": "admin",
+      "channel": "general",
+      "text": "System online. Invite-only access strictly enforced.",
+      "timestamp": "2026-09-24T06:00:10.000Z"
+    }
+  ],
+  "tickets": [
+    {
+      "id": "tkt-101",
+      "operatorId": "usr-op-01",
+      "operatorUsername": "operator-01",
+      "title": "Tunnel Cloud latency check",
+      "description": "Routine connection telemetry nominal across all relay nodes.",
+      "priority": "STANDARD",
+      "status": "OPEN",
+      "createdAt": "2026-09-24T05:45:00.000Z"
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "log-1790237933368-332",
+      "timestamp": "2026-09-24T08:18:53.368Z",
+      "event": "MFA_SETUP_COMPLETE",
+      "username": "operator-01",
+      "ip": "127.0.0.1",
+      "details": "2-Step MFA configured and activated"
+    },
+    {
+      "id": "log-1790237927143-472",
+      "timestamp": "2026-09-24T08:18:47.143Z",
+      "event": "LOGIN_FAILED",
+      "username": "admin",
+      "ip": "127.0.0.1",
+      "details": "Incorrect security passphrase"
+    },
+    {
+      "id": "log-1790237924119-393",
+      "timestamp": "2026-09-24T08:18:44.119Z",
+      "event": "LOGIN_FAILED",
+      "username": "admin",
+      "ip": "127.0.0.1",
+      "details": "Incorrect security passphrase"
+    },
+    {
+      "id": "log-1790237815557-334",
+      "timestamp": "2026-09-24T08:16:55.557Z",
+      "event": "LOGOUT",
+      "username": "admin",
+      "ip": "127.0.0.1",
+      "details": "Session terminated"
+    },
+    {
+      "id": "log-1790237158974-367",
+      "timestamp": "2026-09-24T08:05:58.974Z",
+      "event": "MFA_SETUP_COMPLETE",
+      "username": "admin",
+      "ip": "127.0.0.1",
+      "details": "2-Step MFA configured and activated"
+    },
+    {
+      "id": "log-001",
+      "timestamp": "2026-09-24T05:00:00.000Z",
+      "event": "SYSTEM_BOOT",
+      "username": "SYSTEM",
+      "ip": "127.0.0.1",
+      "details": "LVO-Cloud authentication online. Mandatory 2-step MFA enforced."
+    }
+  ],
+  "systemStatus": {
+    "Alliance": {
+      "down": false,
+      "message": "All operational lines nominal."
+    },
+    "Vindex": {
+      "down": false,
+      "message": "Tunnel relay cipher active."
+    },
+    "Operations": {
+      "down": false,
+      "message": "Atmospheric cloud online."
+    },
+    "Careers": {
+      "down": false,
+      "message": "Recruitment portal open."
+    },
+    "Chat": {
+      "down": false,
+      "message": "Secure line relay functional."
+    },
+    "Cloud": {
+      "down": false,
+      "message": "Infrastructure operating at 99.98% uptime."
+    }
+  }
+}

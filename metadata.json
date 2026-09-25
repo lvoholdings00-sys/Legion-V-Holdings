@@ -1,0 +1,8 @@
+{
+  "name": "LVO",
+  "description": "Classified access terminal portal for LVO Holdings.",
+  "prompt": "This app was imported from GitHub repository lvoholdings00-sys/LVO-Online.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

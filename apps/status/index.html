@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+  // ── Unified Session Auth Gate ──
+  (function() {
+    function getStoredToken() {
+      var match = document.cookie.match(/(?:^|; )lvo_token=([^;]*)/);
+      return localStorage.getItem("lvo_token") || (match ? decodeURIComponent(match[1]) : null);
+    }
+    if (!getStoredToken()) {
+      window.location.replace("/");
+    }
+  })();
+  </script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LVO Status — Global Operations</title>
+<link rel="icon" type="image/png" href="assets/logo.png">
+
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+
+<!-- Three.js for the globe -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<style>
+:root {
+  --black:       #0a0a0a;
+  --surface:     #111111;
+  --card:        #161616;
+  --card-hover:  #1c1c1c;
+  --border:      #2a2a2a;
+  --border-gold: #b8953f44;
+  --gold:        #b8953f;
+  --gold-light:  #d4a853;
+  --gold-dim:    #7a5f1a;
+  --gold-glow:   #b8953f18;
+  --text:        #e8e6e0;
+  --text-dim:    #9a9690;
+  --text-muted:  #5a5650;
+  --red:         #8b2020;
+  --red-light:   #c0392b;
+  --green:       #2d6a4a;
+  --sidebar-w:   224px;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{font-size:13px}
+body{background:var(--black);color:var(--text);font-family:'DM Mono',monospace;min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");pointer-events:none;z-index:9999;opacity:.3}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+#app{display:none;height:100vh;overflow:hidden;flex-direction:column}
+#app.visible{display:flex;animation:fadeIn .6s ease}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* TOP BAR */
+.top-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 32px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;z-index:100}
+.top-bar-left{display:flex;align-items:center;gap:20px}
+.top-logo{height:24px;width:auto;object-fit:contain;display:block}
+.top-nav{display:flex;gap:0}
+.top-nav-item{font-size:9px;letter-spacing:.2em;color:var(--text-muted);text-transform:uppercase;padding:6px 14px;cursor:pointer;border-bottom:1px solid transparent;transition:all .2s}
+.top-nav-item:hover{color:var(--text-dim)}
+.top-nav-item.active{color:var(--gold);border-bottom-color:var(--gold)}
+.top-right{display:flex;align-items:center;gap:14px}
+.clock{font-size:10px;color:var(--text-muted);letter-spacing:.12em}
+.auth-status{display:flex;align-items:center;gap:7px;font-size:9px;letter-spacing:.16em;color:var(--text-muted);text-transform:uppercase}
+.auth-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;box-shadow:0 0 6px #2d6a4a}
+.top-signout{background:none;border:1px solid var(--border);color:var(--text-muted);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.16em;padding:6px 12px;cursor:pointer;text-transform:uppercase;transition:all .2s}
+.top-signout:hover{border-color:var(--gold);color:var(--gold)}
+
+/* MAIN LAYOUT */
+.main-layout{flex:1;display:grid;grid-template-columns:1fr 340px;overflow:hidden}
+
+/* GLOBE SECTION */
+.globe-section{position:relative;overflow:hidden;background:var(--black);border-right:1px solid var(--border)}
+#globe-canvas{width:100%;height:100%;display:block}
+.globe-overlay{position:absolute;bottom:24px;left:28px;pointer-events:none}
+.globe-title{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:300;color:var(--text);letter-spacing:.04em;line-height:1;margin-bottom:4px}
+.globe-sub{font-size:8px;letter-spacing:.28em;color:var(--gold);text-transform:uppercase}
+.globe-counter{position:absolute;top:20px;left:28px;font-size:9px;letter-spacing:.22em;color:var(--text-muted);text-transform:uppercase}
+.globe-hint{position:absolute;bottom:24px;right:24px;font-size:8px;letter-spacing:.14em;color:var(--text-muted);text-transform:uppercase;pointer-events:none}
+
+/* PANEL */
+.panel{background:var(--surface);display:flex;flex-direction:column;overflow:hidden}
+.panel-header{padding:20px 22px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.panel-title{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:400;letter-spacing:.04em;color:var(--text);margin-bottom:2px}
+.panel-sub{font-size:8px;letter-spacing:.2em;color:var(--text-muted);text-transform:uppercase}
+
+.panel-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.ptab{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--text-muted);padding:10px 18px;cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;margin-bottom:-1px}
+.ptab:hover{color:var(--text-dim)}
+.ptab.active{color:var(--gold);border-bottom-color:var(--gold)}
+
+.panel-body{flex:1;overflow-y:auto;padding:0}
+
+/* ADD PIN FORM */
+.add-pin-form{padding:18px 22px;border-bottom:1px solid var(--border)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.form-group{margin-bottom:12px}
+.form-label{display:block;font-size:8px;letter-spacing:.24em;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px}
+.form-input,.form-select,.form-textarea{width:100%;background:var(--card);border:none;border-bottom:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;padding:8px 10px;outline:none;transition:border-color .2s}
+.form-input:focus,.form-select:focus{border-bottom-color:var(--gold)}
+.form-input::placeholder{color:var(--text-muted)}
+.form-select option{background:var(--surface)}
+.color-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+.color-swatch{width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .15s;flex-shrink:0}
+.color-swatch:hover{transform:scale(1.15)}
+.color-swatch.selected{border-color:var(--text);transform:scale(1.1)}
+.img-preview-wrap{display:flex;align-items:center;gap:10px}
+.img-preview{width:32px;height:32px;border-radius:50%;border:1px solid var(--border-gold);object-fit:cover;background:var(--card);flex-shrink:0}
+.img-preview-placeholder{width:32px;height:32px;border-radius:50%;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;background:var(--card);color:var(--text-muted)}
+.btn{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:.22em;text-transform:uppercase;padding:9px 18px;cursor:pointer;border:none;transition:all .2s;white-space:nowrap}
+.btn-gold{background:var(--gold);color:var(--black);font-weight:500}
+.btn-gold:hover{background:var(--gold-light)}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text-muted)}
+.btn-outline:hover{border-color:var(--gold);color:var(--gold)}
+.btn-sm{padding:5px 11px;font-size:8px}
+.btn-icon{background:transparent;border:1px solid var(--border);color:var(--text-muted);padding:3px 7px;font-size:10px;cursor:pointer;transition:all .2s;font-family:'DM Mono',monospace}
+.btn-icon:hover{border-color:var(--red-light);color:var(--red-light)}
+.form-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
+
+/* PIN LIST */
+.pin-list{padding:0}
+.pin-item{padding:13px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;cursor:pointer;transition:background .15s}
+.pin-item:hover{background:var(--card)}
+.pin-item.highlighted{background:var(--gold-glow)}
+.pin-avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;border:2px solid transparent}
+.pin-avatar-fallback{width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;font-family:'Cormorant Garamond',serif;border:2px solid transparent}
+.pin-info{flex:1;min-width:0}
+.pin-label{font-size:12px;color:var(--text);letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pin-coords{font-size:9px;color:var(--text-muted);letter-spacing:.1em;margin-top:2px}
+.pin-division{font-size:8px;letter-spacing:.16em;color:var(--gold);text-transform:uppercase;margin-top:2px}
+.pin-empty{padding:32px 22px;text-align:center;font-size:10px;letter-spacing:.18em;color:var(--text-muted);text-transform:uppercase}
+
+/* STATUS SECTION */
+.status-grid{padding:18px 22px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat-card{background:var(--card);border:1px solid var(--border);padding:14px;transition:border-color .2s}
+.stat-card:hover{border-color:var(--border-gold)}
+.stat-label{font-size:8px;letter-spacing:.26em;color:var(--text-muted);text-transform:uppercase;margin-bottom:8px}
+.stat-value{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:300;color:var(--text);line-height:1}
+.stat-sub{font-size:9px;color:var(--text-muted);margin-top:3px;letter-spacing:.08em}
+.stat-sub.gold{color:var(--gold)}
+.divider{height:1px;background:var(--border);margin:0 22px}
+
+/* DIVISION PRESENCE */
+.presence-list{padding:14px 22px}
+.presence-item{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)}
+.presence-item:last-child{border-bottom:none}
+.presence-name{font-size:11px;color:var(--text-dim);letter-spacing:.04em}
+.presence-count{font-size:9px;color:var(--gold);letter-spacing:.1em}
+.presence-bar-wrap{width:60px;height:2px;background:var(--border);margin-left:10px}
+.presence-bar{height:100%;background:var(--gold);transition:width .4s}
+
+/* SYSTEM CONTROL PANEL */
+.ctrl-wrap{padding:18px 22px}
+.ctrl-intro{font-size:10px;color:var(--text-dim);line-height:1.7;margin-bottom:16px;letter-spacing:.02em}
+.ctrl-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.ctrl-actions .btn-danger{background:transparent;border:1px solid var(--red-light);color:var(--red-light)}
+.ctrl-actions .btn-danger:hover{background:var(--red-light);color:var(--text)}
+.ctrl-list{display:flex;flex-direction:column;gap:10px}
+.ctrl-row{background:var(--card);border:1px solid var(--border);padding:14px}
+.ctrl-row.is-down{border-color:rgba(192,57,43,.45)}
+.ctrl-row-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:10px;flex-wrap:wrap}
+.ctrl-name{font-size:13px;letter-spacing:.06em;color:var(--text)}
+.ctrl-pill{font-size:8px;letter-spacing:.16em;text-transform:uppercase;padding:4px 9px;flex-shrink:0}
+.ctrl-pill.up{color:var(--green);border:1px solid rgba(45,106,74,.5)}
+.ctrl-pill.down{color:var(--red-light);border:1px solid rgba(192,57,43,.5)}
+.ctrl-msg{margin-bottom:10px}
+.ctrl-row-actions{display:flex;gap:8px;flex-wrap:wrap}
+.ctrl-updated{font-size:8px;color:var(--text-muted);letter-spacing:.1em;margin-top:8px}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border-gold);color:var(--text);font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.1em;padding:12px 20px;z-index:9001;animation:toastIn .3s ease;white-space:nowrap}
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+/* TOOLTIP */
+.globe-tooltip{position:absolute;background:var(--card);border:1px solid var(--border-gold);padding:9px 14px;font-family:'DM Mono',monospace;pointer-events:none;z-index:200;display:none}
+.globe-tooltip-label{font-size:11px;color:var(--text);letter-spacing:.04em}
+.globe-tooltip-coords{font-size:9px;color:var(--text-muted);margin-top:3px;letter-spacing:.1em}
+.globe-tooltip-div{font-size:8px;color:var(--gold);text-transform:uppercase;letter-spacing:.18em;margin-top:2px}
+
+/* SCAN LINE */
+.globe-section::after{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.03) 2px,rgba(0,0,0,.03) 4px);pointer-events:none;z-index:10}
+
+/* EDIT MODAL */
+.modal-overlay{position:fixed;inset:0;background:#0a0a0acc;z-index:500;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border-gold);width:480px;max-width:92vw;max-height:88vh;overflow-y:auto;padding:28px;animation:modalIn .2s ease}
+@keyframes modalIn{from{opacity:0;transform:scale(.97) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.modal-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px}
+.modal-title{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:400;color:var(--text)}
+.modal-close{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:17px;padding:0;line-height:1;transition:color .2s}
+.modal-close:hover{color:var(--text)}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+
+/* AUTH SCREENS */
+#login-screen,#denied-screen{display:none !important;}
+#login-screen.visible,#denied-screen.visible{display:flex}
+.login-card{background:var(--surface);border:1px solid var(--border-gold);padding:36px 32px;width:340px;max-width:90vw;display:flex;flex-direction:column;animation:modalIn .2s ease}
+.login-logo{height:32px;width:auto;object-fit:contain;margin:0 auto 14px;display:block}
+.login-title{font-family:'Cormorant Garamond',serif;font-size:21px;font-weight:400;color:var(--text);text-align:center;letter-spacing:.03em;margin-bottom:4px}
+.login-tagline{font-size:8px;letter-spacing:.24em;color:var(--gold);text-transform:uppercase;text-align:center;margin-bottom:22px}
+.subhead{font-size:10px;color:var(--text-dim);line-height:1.6;margin-bottom:14px}
+.error-text{font-size:10px;color:var(--red-light);min-height:14px;letter-spacing:.02em;margin-top:2px}
+.denied-card{background:var(--surface);border:1px solid rgba(192,57,43,.5);padding:40px 34px;width:380px;max-width:90vw;text-align:center}
+.denied-title{font-family:'Cormorant Garamond',serif;font-size:22px;color:var(--red-light);margin-bottom:12px;letter-spacing:.03em}
+.denied-text{font-size:11px;color:var(--text-dim);line-height:1.7;margin-bottom:20px}
+.denied-text strong{color:var(--text)}
+</style>
+</head>
+<body>
+
+<!-- Login — same LVOAuth-backed username/password flow as the chat room ("secure line") -->
+<section id="login-screen">
+  <form class="login-card" id="login-form">
+    <img class="login-logo" src="assets/logo.png" alt="LVO">
+    <div class="login-title">Global Operations Status</div>
+    <div class="login-tagline">Admin sign-in required</div>
+    <div class="form-group">
+      <label class="form-label">Username</label>
+      <input class="form-input" id="login-username" type="text" autocomplete="username" required>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input class="form-input" id="login-password" type="password" autocomplete="current-password" required>
+    </div>
+    <button class="btn btn-gold" type="submit" id="login-submit" style="width:100%;margin-top:6px">Sign In</button>
+    <p class="error-text" id="login-error"></p>
+  </form>
+</section>
+
+<!-- Force password change (first login with a temporary password — same as the chat room) -->
+<div class="modal-overlay" id="pwd-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Set a New Password</div>
+    </div>
+    <p class="subhead">Your admin created this account with a temporary password. Choose your own before continuing.</p>
+    <div class="form-group">
+      <label class="form-label">New Password (8+ characters)</label>
+      <input class="form-input" id="pwd-new" type="password" autocomplete="new-password">
+    </div>
+    <p class="error-text" id="pwd-error"></p>
+    <div class="modal-footer">
+      <button class="btn btn-gold btn-sm" id="pwd-save">Save &amp; Continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shown to any signed-in user who isn't tagged admin -->
+<section id="denied-screen">
+  <div class="denied-card">
+    <div class="denied-title">Access Restricted</div>
+    <div class="denied-text">This status board is limited to LVO admins. The account <strong id="denied-username"></strong> doesn't have admin access.</div>
+    <button class="btn btn-outline btn-sm" id="denied-signout">Sign Out</button>
+  </div>
+</section>
+
+<!-- App -->
+<div id="app">
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="top-bar-left">
+      <img class="top-logo" src="assets/logo.png" alt="LVO">
+      <nav class="top-nav">
+        <div class="top-nav-item" onclick="window.location.href='/'" style="color:var(--gold);font-weight:600;">← Menu</div><div class="top-nav-item" onclick="window.location.href='/dashboard/'">Command</div>
+        <div class="top-nav-item active">Status</div>
+      </nav>
+    </div>
+    <div class="top-right">
+      <div class="clock" id="clock">--:-- --</div>
+      <div class="auth-status">
+        <span class="auth-dot" style="background:var(--text-muted);box-shadow:none"></span>
+        <span id="user-name">Not signed in</span>
+      </div>
+      <button class="top-signout" id="sign-out-btn" type="button">Sign Out</button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main-layout">
+
+    <!-- Globe -->
+    <div class="globe-section" id="globe-section">
+      <canvas id="globe-canvas"></canvas>
+      <div class="globe-counter" id="globe-counter">0 Pins</div>
+      <div class="globe-overlay">
+        <div class="globe-title">Global Operations</div>
+        <div class="globe-sub">LVO Holdings LLC · Houston, TX</div>
+      </div>
+      <div class="globe-hint">Drag to rotate · Scroll to zoom</div>
+      <div class="globe-tooltip" id="globe-tooltip">
+        <div class="globe-tooltip-label" id="tt-label"></div>
+        <div class="globe-tooltip-coords" id="tt-coords"></div>
+        <div class="globe-tooltip-div" id="tt-div"></div>
+      </div>
+    </div>
+
+    <!-- Side Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Operations Map</div>
+        <div class="panel-sub">Global asset · personnel · division presence</div>
+      </div>
+      <div class="panel-tabs">
+        <div class="ptab active" onclick="switchPanel('pins',this)">Pins</div>
+        <div class="ptab" onclick="switchPanel('add',this)">Add Pin</div>
+        <div class="ptab" onclick="switchPanel('status',this)">Status</div>
+        <div class="ptab" onclick="switchPanel('incidents',this)">Incidents</div>
+        <div class="ptab" onclick="switchPanel('control',this)">Control</div>
+      </div>
+      <div class="panel-body" id="panel-body">
+        <!-- populated by switchPanel() -->
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-overlay" id="edit-modal" onclick="closeEditModalOnOverlay(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Edit Pin</div>
+      <button class="modal-close" onclick="closeEditModal()">✕</button>
+    </div>
+    <div id="edit-modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline btn-sm" onclick="closeEditModal()">Cancel</button>
+      <button class="btn btn-gold btn-sm" onclick="saveEditPin()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="assets/auth-client.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════ */
+const STORAGE_KEY = 'lvo_status_pins_v2';
+const INCIDENTS_KEY = 'lvo_status_incidents_v1';
+const OPERATOR_KEY = 'lvo_status_operator_name';
+
+let _pins = [];
+let _editId = null;
+let _activePanel = 'pins';
+let _highlightedPin = null;
+let _U = null;
+let _systemStatus = {};
+let _incidents = [];
+
+/* Divisions this panel can take offline — must exactly match VALID_DIVISIONS
+   in worker.js ("Alliance", "Vindex", "Ops"), since normalizeDivision()
+   on the backend rejects anything else. */
+const DIVISIONS_CONTROL = ['Alliance', 'Vindex', 'Ops'];
+
+const PIN_COLORS = [
+  { name:'Gold',    hex:'#b8953f' },
+  { name:'Red',     hex:'#c0392b' },
+  { name:'Blue',    hex:'#2980b9' },
+  { name:'Green',   hex:'#27ae60' },
+  { name:'Purple',  hex:'#8e44ad' },
+  { name:'Orange',  hex:'#d35400' },
+  { name:'Cyan',    hex:'#16a085' },
+  { name:'White',   hex:'#e8e6e0' },
+];
+
+const DIVISIONS = ['Overview','Vindex','Operations','Alliance','Obscura','Capital','Custodia','Outreach','Alatus','Pedes','Petra','Holdings'];
+
+function loadPins() {
+  try { _pins = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { _pins = []; }
+}
+function savePins() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(_pins));
+}
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+/* ═══════════════════════════════════════════════════
+   INCIDENT LOG — local audit trail of every online/offline
+   toggle and status-message change. Kept in localStorage
+   alongside pins, same persistence model as the rest of
+   this page. Feeds the "Incidents" tab and the uptime %
+   badges shown in Status/Control.
+═══════════════════════════════════════════════════ */
+function loadIncidents() {
+  try { _incidents = JSON.parse(localStorage.getItem(INCIDENTS_KEY) || '[]'); } catch(e) { _incidents = []; }
+}
+function saveIncidents() {
+  localStorage.setItem(INCIDENTS_KEY, JSON.stringify(_incidents));
+}
+function logIncident(division, type, message) {
+  _incidents.unshift({
+    id: genId(),
+    division,
+    type,          // 'down' | 'up' | 'message'
+    message: message || '',
+    timestamp: new Date().toISOString(),
+    user: getOperatorName()
+  });
+  saveIncidents();
+}
+
+function getOperatorName() {
+  return localStorage.getItem(OPERATOR_KEY) || 'Unknown';
+}
+function setOperatorName() {
+  const current = localStorage.getItem(OPERATOR_KEY) || '';
+  const n = prompt('Your name (recorded in the audit log for changes you make):', current);
+  if (n !== null && n.trim()) {
+    localStorage.setItem(OPERATOR_KEY, n.trim());
+    showToast('Operator name set — ' + n.trim());
+  }
+}
+
+/* Rolling uptime % for a division over the last `days` days, derived
+   from down/up events in the incident log. Any division with no
+   logged incidents in the window reads as 100% (nothing recorded
+   as having gone down). */
+function computeUptime(division, days) {
+  days = days || 30;
+  const now = Date.now();
+  const windowStart = now - days * 24 * 60 * 60 * 1000;
+  const events = _incidents
+    .filter(i => i.division === division && (i.type === 'down' || i.type === 'up'))
+    .slice()
+    .sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+  let downMs = 0;
+  let curDownStart = null;
+  events.forEach(e => {
+    const t = Math.max(new Date(e.timestamp).getTime(), windowStart);
+    if (e.type === 'down') {
+      if (curDownStart === null) curDownStart = t;
+    } else if (e.type === 'up') {
+      if (curDownStart !== null) { downMs += t - curDownStart; curDownStart = null; }
+    }
+  });
+  if (curDownStart !== null) downMs += now - curDownStart;
+
+  const totalMs = now - windowStart;
+  if (totalMs <= 0) return 100;
+  return Math.max(0, Math.min(100, 100 * (1 - downMs / totalMs)));
+}
+
+/* ═══════════════════════════════════════════════════
+   CSV EXPORT
+═══════════════════════════════════════════════════ */
+function downloadCSV(rows, filename) {
+  const csv = rows.map(r => r.map(c => `"${String(c == null ? '' : c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+function exportPinsCSV() {
+  const rows = [['Label','Latitude','Longitude','Division','Color','Notes']];
+  _pins.forEach(p => rows.push([p.label, p.lat, p.lng, p.division||'', p.color||'', p.notes||'']));
+  downloadCSV(rows, 'lvo-pins-export.csv');
+  showToast('Pins exported');
+}
+function exportIncidentsCSV() {
+  const rows = [['Division','Type','Message','Timestamp','Operator']];
+  _incidents.forEach(i => rows.push([i.division, i.type, i.message||'', i.timestamp, i.user||'']));
+  downloadCSV(rows, 'lvo-incident-log.csv');
+  showToast('Incident log exported');
+}
+
+/* ═══════════════════════════════════════════════════
+   AUTH — this reuses the same LVOAuth client the chat room
+   ("secure line") signs in with, loaded from assets/auth-client.js.
+   That's the same script workerFetch() below already calls into.
+
+   This assumes the client exposes:
+     LVOAuth.isAuthenticated()           -> bool
+     LVOAuth.getCurrentUser()            -> {username, displayName, isAdmin, mustChangePassword, ...} | null
+     LVOAuth.login(username, password)   -> Promise<{user, mustChangePassword}>, rejects with {message} on bad creds
+     LVOAuth.changePassword(newPassword) -> Promise<void>
+     LVOAuth.logout()                    -> void
+   If your actual auth-client.js names these differently, only the
+   calls in this block need to change — nothing else in the file
+   depends on the exact shape.
+
+   Only accounts flagged admin get past this gate. Everyone else
+   (a valid login, just not an admin) lands on the Access Restricted
+   screen instead of the dashboard.
+═══════════════════════════════════════════════════ */
+function isAdminUser(user) {
+  if (!user) return false;
+  // Checks a few common shapes so this works whether the client
+  // exposes isAdmin, is_admin, admin, a role string, or a tags/roles array.
+  return !!(user.isAdmin || user.is_admin || user.admin ||
+    user.role === 'admin' ||
+    (Array.isArray(user.roles) && user.roles.includes('admin')) ||
+    (Array.isArray(user.tags) && user.tags.includes('admin')));
+}
+
+function showScreen(id) {
+  ['login-screen', 'denied-screen'].forEach(s => document.getElementById(s).classList.remove('visible'));
+  document.getElementById('app').classList.remove('visible');
+  if (id === 'app') document.getElementById('app').classList.add('visible');
+  else document.getElementById(id).classList.add('visible');
+}
+
+function boot() {
+    let user = null;
+    try { user = JSON.parse(localStorage.getItem("lvo_user") || "null"); } catch(e){}
+    const token = localStorage.getItem("lvo_token");
+    if (!user && !token) {
+      window.location.replace("/");
+      return;
+    }
+    user = user || { username: "Operator", role: "admin", displayName: "Authorized Operator" };
+    document.getElementById("user-name").textContent = user.username || "Operator";
+    const dot = document.querySelector(".auth-dot");
+    if (dot) { dot.style.background = "var(--green)"; dot.style.boxShadow = "0 0 6px #2d6a4a"; }
+    showScreen("app");
+    startApp();
+  }
+
+  function startApp() {
+  loadPins();
+  loadIncidents();
+  if (!window._globeStarted) {
+    window._globeStarted = true;
+    initGlobe();
+    cancelAnimationFrame(globeAnimFrame);
+    animateGlobeWithPulse();
+  } else {
+    renderPins();
+  }
+  switchPanel('pins', document.querySelector('.ptab'));
+}
+
+function openPwdModal() {
+  document.getElementById('pwd-new').value = '';
+  document.getElementById('pwd-error').textContent = '';
+  document.getElementById('pwd-modal').classList.add('open');
+}
+function closePwdModal() {
+  document.getElementById('pwd-modal').classList.remove('open');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errEl = document.getElementById('login-error');
+    const btn = document.getElementById('login-submit');
+    errEl.textContent = '';
+    btn.disabled = true;
+    try {
+      const result = await LVOAuth.login(username, password);
+      const user = (result && result.user) || (LVOAuth.getCurrentUser && LVOAuth.getCurrentUser());
+      if ((result && result.mustChangePassword) || (user && user.mustChangePassword)) {
+        openPwdModal();
+      } else {
+        gateOnAdmin(user);
+      }
+    } catch (err) {
+      errEl.textContent = (err && err.message) || 'Invalid username or password.';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById('pwd-save').addEventListener('click', async () => {
+    const val = document.getElementById('pwd-new').value;
+    const errEl = document.getElementById('pwd-error');
+    if (!val || val.length < 8) { errEl.textContent = 'Use at least 8 characters.'; return; }
+    try {
+      await LVOAuth.changePassword(val);
+      closePwdModal();
+      const user = LVOAuth.getCurrentUser && LVOAuth.getCurrentUser();
+      gateOnAdmin(user);
+    } catch (err) {
+      errEl.textContent = (err && err.message) || 'Could not set password — try again.';
+    }
+  });
+
+  document.getElementById('denied-signout').addEventListener('click', () => {
+    try { LVOAuth.logout && LVOAuth.logout(); } catch(e) {}
+    showScreen('login-screen');
+  });
+});
+
+/* ═══════════════════════════════════════════════════
+   WORKER FETCH — same pattern as the division dashboards.
+   Now that a real session exists post-login, LVOAuth._request
+   carries the session token, so Control tab calls
+   (fetchSystemStatus/toggleSystem/saveSystemMessage) work the
+   same way they do on the division dashboards.
+═══════════════════════════════════════════════════ */
+function workerFetch(path, opts = {}) {
+    const token = localStorage.getItem("lvo_token");
+    const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
+    if (token) headers["Authorization"] = "Bearer " + token;
+    return fetch("/api" + path, { ...opts, headers });
+  }
+
+  function tickClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) +
+    ' · ' + now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+setInterval(tickClock,1000); tickClock();
+
+/* ═══════════════════════════════════════════════════
+   GLOBE (Three.js)
+═══════════════════════════════════════════════════ */
+let globeScene, globeCamera, globeRenderer, globeSphere, globeAtmo;
+let globePinMeshes = [];
+let globeAnimFrame;
+let isDragging = false, prevMouse = {x:0,y:0};
+let sphereGroup;
+const GLOBE_RADIUS = 1.6;
+
+function initGlobe() {
+  const section = document.getElementById('globe-section');
+  const canvas  = document.getElementById('globe-canvas');
+  const W = section.clientWidth;
+  const H = section.clientHeight;
+
+  globeScene = new THREE.Scene();
+  globeCamera = new THREE.PerspectiveCamera(40, W/H, 0.1, 100);
+  globeCamera.position.set(0, 0, 5.5);
+
+  globeRenderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
+  globeRenderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  globeRenderer.setSize(W, H);
+  globeRenderer.setClearColor(0x000000, 0);
+
+  // Lights
+  const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+  globeScene.add(ambient);
+  const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+  sun.position.set(6, 3, 5);
+  globeScene.add(sun);
+  const fill = new THREE.DirectionalLight(0x88ccff, 0.3);
+  fill.position.set(-4, 1, -3);
+  globeScene.add(fill);
+
+  // Sphere group (rotates)
+  sphereGroup = new THREE.Group();
+  globeScene.add(sphereGroup);
+
+  // Globe mesh
+  const loader = new THREE.TextureLoader();
+  const geo = new THREE.SphereGeometry(GLOBE_RADIUS, 64, 64);
+  const mat = new THREE.MeshStandardMaterial({
+    roughness: 0.75,
+    metalness: 0.05,
+  });
+  loader.load(
+    'https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg',
+    tex => { tex.colorSpace = THREE.SRGBColorSpace; mat.map = tex; mat.needsUpdate = true; },
+  );
+  loader.load(
+    'https://unpkg.com/three-globe@2.31.0/example/img/earth-topology.png',
+    tex => { mat.bumpMap = tex; mat.bumpScale = 0.06; mat.needsUpdate = true; },
+  );
+  globeSphere = new THREE.Mesh(geo, mat);
+  sphereGroup.add(globeSphere);
+
+  // Atmosphere
+  const atmoMat = new THREE.ShaderMaterial({
+    uniforms: { c: { value:0.2 }, p: { value:3.2 }, glowColor:{ value: new THREE.Color(0x2255aa) } },
+    vertexShader:`
+      varying vec3 vNormal;
+      void main(){
+        vNormal = normalize(normalMatrix * normal);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+      }`,
+    fragmentShader:`
+      uniform float c;
+      uniform float p;
+      uniform vec3 glowColor;
+      varying vec3 vNormal;
+      void main(){
+        float intensity = pow(c - dot(vNormal, vec3(0,0,1.0)), p);
+        gl_FragColor = vec4(glowColor, intensity * 0.8);
+      }`,
+    side: THREE.FrontSide,
+    blending: THREE.AdditiveBlending,
+    transparent: true,
+    depthWrite: false,
+  });
+  globeAtmo = new THREE.Mesh(new THREE.SphereGeometry(GLOBE_RADIUS * 1.12, 64, 32), atmoMat);
+  globeScene.add(globeAtmo);
+
+  // Wireframe subtle overlay
+  const wireMat = new THREE.MeshBasicMaterial({color:0x223355, wireframe:true, transparent:true, opacity:0.06});
+  const wireGeo = new THREE.SphereGeometry(GLOBE_RADIUS * 1.002, 24, 12);
+  sphereGroup.add(new THREE.Mesh(wireGeo, wireMat));
+
+  // Stars
+  const starGeo = new THREE.BufferGeometry();
+  const starVerts = [];
+  for(let i=0;i<2000;i++){
+    const r = 40 + Math.random()*20;
+    const theta = Math.random()*Math.PI*2;
+    const phi = Math.acos(2*Math.random()-1);
+    starVerts.push(r*Math.sin(phi)*Math.cos(theta), r*Math.cos(phi), r*Math.sin(phi)*Math.sin(theta));
+  }
+  starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starVerts,3));
+  const starMat = new THREE.PointsMaterial({color:0xffffff,size:0.08,transparent:true,opacity:0.5});
+  globeScene.add(new THREE.Points(starGeo,starMat));
+
+  // Mouse controls
+  canvas.addEventListener('mousedown', e => { isDragging=true; prevMouse={x:e.clientX,y:e.clientY}; });
+  window.addEventListener('mouseup', () => isDragging=false);
+  window.addEventListener('mousemove', onGlobeMouseMove);
+  canvas.addEventListener('wheel', e => {
+    globeCamera.position.z = Math.max(3, Math.min(12, globeCamera.position.z + e.deltaY * 0.01));
+  });
+  canvas.addEventListener('mousemove', onGlobeHover);
+  canvas.addEventListener('click', onGlobeClick);
+
+  // Resize
+  window.addEventListener('resize', () => {
+    const W2 = section.clientWidth, H2 = section.clientHeight;
+    globeCamera.aspect = W2/H2;
+    globeCamera.updateProjectionMatrix();
+    globeRenderer.setSize(W2,H2);
+  });
+
+  renderPins();
+  animateGlobe();
+}
+
+let autoRotate = true;
+function animateGlobe() {
+  globeAnimFrame = requestAnimationFrame(animateGlobe);
+  if (autoRotate && !isDragging) sphereGroup.rotation.y += 0.001;
+  globeAtmo.rotation.y += 0.0003;
+  globeRenderer.render(globeScene, globeCamera);
+}
+
+function onGlobeMouseMove(e) {
+  if (!isDragging) return;
+  const dx = e.clientX - prevMouse.x;
+  const dy = e.clientY - prevMouse.y;
+  sphereGroup.rotation.y += dx * 0.005;
+  sphereGroup.rotation.x += dy * 0.005;
+  sphereGroup.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, sphereGroup.rotation.x));
+  prevMouse = {x:e.clientX,y:e.clientY};
+}
+
+function latLngToVec3(lat, lng, r) {
+  const phi   = (90 - lat) * (Math.PI / 180);
+  const theta = (lng + 180) * (Math.PI / 180);
+  return new THREE.Vector3(
+    -(r * Math.sin(phi) * Math.cos(theta)),
+     (r * Math.cos(phi)),
+     (r * Math.sin(phi) * Math.sin(theta))
+  );
+}
+
+function renderPins() {
+  // Remove old pins
+  globePinMeshes.forEach(({group}) => sphereGroup.remove(group));
+  globePinMeshes = [];
+
+  _pins.forEach(pin => {
+    const color = new THREE.Color(pin.color || '#b8953f');
+    const pos = latLngToVec3(pin.lat, pin.lng, GLOBE_RADIUS);
+    const dir = pos.clone().normalize();
+
+    const group = new THREE.Group();
+
+    // Spike
+    const spikeMat = new THREE.MeshBasicMaterial({color, transparent:true, opacity:0.85});
+    const spikeGeo = new THREE.CylinderGeometry(0.008, 0.008, 0.22, 8);
+    const spike = new THREE.Mesh(spikeGeo, spikeMat);
+
+    // Orient spike
+    const up = new THREE.Vector3(0,1,0);
+    const quat = new THREE.Quaternion().setFromUnitVectors(up, dir);
+    spike.quaternion.copy(quat);
+    spike.position.copy(dir).multiplyScalar(GLOBE_RADIUS + 0.11);
+    group.add(spike);
+
+    // Head dot
+    const headGeo = new THREE.SphereGeometry(0.045, 10, 10);
+    const headMat = new THREE.MeshBasicMaterial({color});
+    const head = new THREE.Mesh(headGeo, headMat);
+    head.position.copy(dir).multiplyScalar(GLOBE_RADIUS + 0.23);
+    group.add(head);
+
+    // Pulse ring
+    const ringGeo = new THREE.RingGeometry(0.055, 0.075, 20);
+    const ringMat = new THREE.MeshBasicMaterial({color, side:THREE.DoubleSide, transparent:true, opacity:0.35});
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.quaternion.copy(quat);
+    ring.position.copy(dir).multiplyScalar(GLOBE_RADIUS + 0.23);
+    group.add(ring);
+
+    // Base dot on surface
+    const baseDotGeo = new THREE.CircleGeometry(0.025, 16);
+    const baseDotMat = new THREE.MeshBasicMaterial({color, side:THREE.DoubleSide, transparent:true, opacity:0.5});
+    const baseDot = new THREE.Mesh(baseDotGeo, baseDotMat);
+    baseDot.quaternion.copy(quat);
+    baseDot.position.copy(dir).multiplyScalar(GLOBE_RADIUS + 0.002);
+    group.add(baseDot);
+
+    sphereGroup.add(group);
+    globePinMeshes.push({pin, group, head, ring});
+  });
+
+  updateCounter();
+}
+
+// Pulse animation injected into animate loop
+function animateGlobeWithPulse() {
+  globeAnimFrame = requestAnimationFrame(animateGlobeWithPulse);
+  if (autoRotate && !isDragging) sphereGroup.rotation.y += 0.001;
+  globeAtmo.rotation.y += 0.0003;
+  const t = Date.now() * 0.002;
+  globePinMeshes.forEach(({ring, pin}) => {
+    if (ring) {
+      ring.scale.setScalar(1 + 0.22 * Math.sin(t + pin.lat));
+      ring.material.opacity = 0.18 + 0.2 * Math.abs(Math.sin(t + pin.lat));
+    }
+  });
+  globeRenderer.render(globeScene, globeCamera);
+}
+
+function onGlobeHover(e) {
+  const canvas = document.getElementById('globe-canvas');
+  const rect = canvas.getBoundingClientRect();
+  const mouse = new THREE.Vector2(
+    ((e.clientX - rect.left) / rect.width) * 2 - 1,
+    -((e.clientY - rect.top) / rect.height) * 2 + 1
+  );
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, globeCamera);
+
+  const tooltip = document.getElementById('globe-tooltip');
+  let hit = false;
+  for (const {pin, head} of globePinMeshes) {
+    const intersects = raycaster.intersectObject(head);
+    if (intersects.length > 0) {
+      document.getElementById('tt-label').textContent = pin.label || 'Unnamed Pin';
+      document.getElementById('tt-coords').textContent = `${pin.lat.toFixed(3)}°, ${pin.lng.toFixed(3)}°`;
+      document.getElementById('tt-div').textContent = pin.division || '';
+      tooltip.style.left = (e.clientX - rect.left + 14) + 'px';
+      tooltip.style.top  = (e.clientY - rect.top - 10) + 'px';
+      tooltip.style.display = 'block';
+      canvas.style.cursor = 'pointer';
+      hit = true;
+      break;
+    }
+  }
+  if (!hit) { tooltip.style.display = 'none'; canvas.style.cursor = 'grab'; }
+}
+
+function onGlobeClick(e) {
+  const canvas = document.getElementById('globe-canvas');
+  const rect = canvas.getBoundingClientRect();
+  const mouse = new THREE.Vector2(
+    ((e.clientX - rect.left) / rect.width) * 2 - 1,
+    -((e.clientY - rect.top) / rect.height) * 2 + 1
+  );
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, globeCamera);
+
+  for (const {pin, head} of globePinMeshes) {
+    const intersects = raycaster.intersectObject(head);
+    if (intersects.length > 0) {
+      highlightPin(pin.id);
+      break;
+    }
+  }
+}
+
+function highlightPin(id) {
+  _highlightedPin = id;
+  switchPanel('pins', document.querySelector('.ptab'));
+  renderPinList();
+  setTimeout(() => {
+    const el = document.getElementById('pin-' + id);
+    if (el) el.scrollIntoView({behavior:'smooth', block:'nearest'});
+  }, 100);
+}
+
+function updateCounter() {
+  document.getElementById('globe-counter').textContent = _pins.length + ' Pin' + (_pins.length !== 1 ? 's' : '');
+}
+
+/* ═══════════════════════════════════════════════════
+   PANEL
+═══════════════════════════════════════════════════ */
+let _selectedColor = PIN_COLORS[0].hex;
+
+function switchPanel(name, el) {
+  _activePanel = name;
+  document.querySelectorAll('.ptab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  const body = document.getElementById('panel-body');
+
+  if (name === 'pins') {
+    body.innerHTML = renderPinListHTML();
+  } else if (name === 'add') {
+    body.innerHTML = renderAddFormHTML();
+    _selectedColor = PIN_COLORS[0].hex;
+    selectColor(PIN_COLORS[0].hex, document.querySelector('.color-swatch'));
+  } else if (name === 'status') {
+    body.innerHTML = renderStatusHTML();
+  } else if (name === 'incidents') {
+    body.innerHTML = renderIncidentsHTML();
+  } else if (name === 'control') {
+    body.innerHTML = renderControlHTML();
+    fetchSystemStatus();
+  }
+}
+
+function renderPinListHTML() {
+  return `<div style="padding:14px 22px 0">
+      <input class="form-input" id="pin-search" placeholder="Filter by label or division…" oninput="renderPinList()">
+    </div>
+    <div class="pin-list" id="pin-list">${renderPinItemsHTML()}</div>`;
+}
+
+function renderPinList() {
+  const el = document.getElementById('pin-list');
+  if (el) el.innerHTML = renderPinItemsHTML();
+}
+
+function renderPinItemsHTML() {
+  const q = (document.getElementById('pin-search')?.value || '').trim().toLowerCase();
+  const filtered = q
+    ? _pins.filter(p => (p.label||'').toLowerCase().includes(q) || (p.division||'').toLowerCase().includes(q))
+    : _pins;
+  if (!_pins.length) return `<div class="pin-empty">No pins yet — add one</div>`;
+  if (!filtered.length) return `<div class="pin-empty">No pins match "${q}"</div>`;
+  return filtered.map(pin => {
+    const highlighted = pin.id === _highlightedPin;
+    const imgEl = pin.imageUrl
+      ? `<img class="pin-avatar" src="${pin.imageUrl}" style="border-color:${pin.color}" onerror="this.style.display='none'">`
+      : `<div class="pin-avatar-fallback" style="background:${pin.color}22;border-color:${pin.color};color:${pin.color}">${(pin.label||'?').charAt(0).toUpperCase()}</div>`;
+    return `<div class="pin-item ${highlighted?'highlighted':''}" id="pin-${pin.id}" onclick="focusPin('${pin.id}')">
+      ${imgEl}
+      <div class="pin-info">
+        <div class="pin-label">${pin.label || 'Unnamed'}</div>
+        <div class="pin-coords">${pin.lat.toFixed(3)}°, ${pin.lng.toFixed(3)}°</div>
+        ${pin.division ? `<div class="pin-division">${pin.division}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="btn-icon" title="Edit" onclick="openEditPin('${pin.id}');event.stopPropagation()">✎</button>
+        <button class="btn-icon" title="Delete" onclick="deletePin('${pin.id}');event.stopPropagation()">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderAddFormHTML() {
+  return `<div class="add-pin-form">
+    <div class="form-group">
+      <label class="form-label">Label</label>
+      <input class="form-input" id="pin-label" placeholder="e.g. Houston HQ, Facility 04…">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Latitude</label>
+        <input class="form-input" id="pin-lat" placeholder="e.g. 29.7604" type="number" step="any">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Longitude</label>
+        <input class="form-input" id="pin-lng" placeholder="e.g. -95.3698" type="number" step="any">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Division</label>
+      <select class="form-select" id="pin-division">
+        <option value="">— None —</option>
+        ${DIVISIONS.map(d => `<option value="${d}">${d}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Pin Color</label>
+      <div class="color-row" id="color-row">
+        ${PIN_COLORS.map((c,i) => `<div class="color-swatch ${i===0?'selected':''}" style="background:${c.hex}" title="${c.name}" onclick="selectColor('${c.hex}',this)"></div>`).join('')}
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Image URL (optional)</label>
+      <div class="img-preview-wrap">
+        <div class="img-preview-placeholder" id="img-preview-placeholder">◎</div>
+        <img class="img-preview" id="img-preview" style="display:none" src="" alt="preview">
+        <input class="form-input" id="pin-img" placeholder="https://…" oninput="previewImg(this.value,'img-preview','img-preview-placeholder')" style="flex:1">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes (optional)</label>
+      <input class="form-input" id="pin-notes" placeholder="Brief description…">
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-outline btn-sm" onclick="prefillHouston()">↺ Default Houston</button>
+      <button class="btn btn-gold btn-sm" onclick="addPin()">Drop Pin</button>
+    </div>
+  </div>`;
+}
+
+function renderStatusHTML() {
+  const total = _pins.length;
+  const byDiv = {};
+  _pins.forEach(p => { const d = p.division || 'Unassigned'; byDiv[d] = (byDiv[d]||0)+1; });
+  const sortedDivs = Object.entries(byDiv).sort((a,b)=>b[1]-a[1]);
+  const maxCount = sortedDivs[0]?.[1] || 1;
+
+  return `<div style="padding:14px 22px 0;display:flex;justify-content:flex-end">
+    <button class="btn btn-outline btn-sm" onclick="exportPinsCSV()">⬇ Export Pins CSV</button>
+  </div>
+  <div class="status-grid">
+    <div class="stat-card"><div class="stat-label">Total Pins</div><div class="stat-value">${total}</div><div class="stat-sub gold">Active</div></div>
+    <div class="stat-card"><div class="stat-label">Divisions</div><div class="stat-value">${Object.keys(byDiv).length}</div><div class="stat-sub">Represented</div></div>
+    <div class="stat-card"><div class="stat-label">Last Updated</div><div class="stat-value" style="font-size:16px">${total ? new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—'}</div></div>
+    <div class="stat-card"><div class="stat-label">Coverage</div><div class="stat-value" style="font-size:18px">${total > 0 ? 'Global' : 'None'}</div></div>
+  </div>
+  <div class="divider"></div>
+  <div class="presence-list">
+    <div style="font-size:8px;letter-spacing:.24em;color:var(--text-muted);text-transform:uppercase;margin-bottom:12px">By Division</div>
+    ${sortedDivs.length ? sortedDivs.map(([d,n]) => `
+      <div class="presence-item">
+        <div class="presence-name">${d}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="presence-bar-wrap"><div class="presence-bar" style="width:${Math.round(n/maxCount*100)}%"></div></div>
+          <div class="presence-count">${n}</div>
+        </div>
+      </div>`).join('') : `<div style="font-size:10px;color:var(--text-muted);padding-top:10px">No pins yet</div>`}
+  </div>
+  <div class="divider"></div>
+  <div class="presence-list">
+    <div style="font-size:8px;letter-spacing:.24em;color:var(--text-muted);text-transform:uppercase;margin-bottom:12px">System Uptime · Last 30 Days</div>
+    ${DIVISIONS_CONTROL.map(d => {
+      const pct = computeUptime(d, 30);
+      return `<div class="presence-item">
+        <div class="presence-name">${d}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="presence-bar-wrap"><div class="presence-bar" style="width:${pct.toFixed(1)}%;${pct < 99 ? 'background:var(--red-light)' : ''}"></div></div>
+          <div class="presence-count">${pct.toFixed(2)}%</div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+/* ═══════════════════════════════════════════════════
+   INCIDENTS TAB — local audit trail / timeline view
+═══════════════════════════════════════════════════ */
+function renderIncidentsHTML() {
+  const divOptions = ['All', ...DIVISIONS_CONTROL];
+  return `<div class="ctrl-wrap">
+    <div class="ctrl-intro">Automatic log of every online/offline toggle and status-message change made from the Control tab, kept on this device.</div>
+    <div class="ctrl-actions">
+      <select class="form-select" id="incident-filter" style="max-width:170px" onchange="renderIncidentList()">
+        ${divOptions.map(d => `<option value="${d}">${d}</option>`).join('')}
+      </select>
+      <button class="btn btn-outline btn-sm" onclick="exportIncidentsCSV()">⬇ Export CSV</button>
+      <button class="btn btn-danger btn-sm" onclick="clearIncidents()">Clear Log</button>
+    </div>
+    <div id="incident-list">${renderIncidentItemsHTML()}</div>
+  </div>`;
+}
+
+function renderIncidentList() {
+  const el = document.getElementById('incident-list');
+  if (el) el.innerHTML = renderIncidentItemsHTML();
+}
+
+function renderIncidentItemsHTML() {
+  const filter = document.getElementById('incident-filter')?.value || 'All';
+  const list = filter === 'All' ? _incidents : _incidents.filter(i => i.division === filter);
+  if (!list.length) return `<div class="pin-empty">No incidents logged yet</div>`;
+  return list.map(i => {
+    const color = i.type === 'down' ? 'var(--red-light)' : i.type === 'up' ? 'var(--green)' : 'var(--gold)';
+    const label = i.type === 'down' ? 'Taken Offline' : i.type === 'up' ? 'Restored Online' : 'Message Updated';
+    const safeMsg = (i.message || '').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    return `<div class="ctrl-row">
+      <div class="ctrl-row-top">
+        <div class="ctrl-name">${i.division}</div>
+        <div class="ctrl-pill" style="color:${color};border:1px solid ${color}">${label}</div>
+      </div>
+      ${safeMsg ? `<div style="font-size:10px;color:var(--text-dim);margin-bottom:8px">"${safeMsg}"</div>` : ''}
+      <div class="ctrl-updated">${new Date(i.timestamp).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'})} · ${i.user || 'Unknown'}</div>
+    </div>`;
+  }).join('');
+}
+
+function clearIncidents() {
+  if (!confirm('Clear the entire incident log? This cannot be undone.')) return;
+  _incidents = [];
+  saveIncidents();
+  renderIncidentList();
+  showToast('Incident log cleared');
+}
+
+/* ═══════════════════════════════════════════════════
+   SYSTEM CONTROL — take any division dashboard offline
+   Backend contract (see WORKER):
+     GET  /system-status                          → { [division]: { down, message, updatedAt } }
+     PUT  /system-status/:division   {down,message} → updates that division (admin-only, server-enforced)
+═══════════════════════════════════════════════════ */
+function renderControlHTML() {
+  return `<div class="ctrl-wrap">
+    <div class="ctrl-intro">Taking a system offline immediately shows a "Systems Down" notice on that division's dashboard for everyone, admins included. Changes apply the moment they're saved.</div>
+    <div class="ctrl-actions">
+      <button class="btn btn-outline btn-sm" onclick="fetchSystemStatus()">↺ Refresh</button>
+      <button class="btn btn-danger btn-sm" onclick="killAll()">⚠ Take All Offline</button>
+      <button class="btn btn-outline btn-sm" onclick="restoreAll()">Restore All</button>
+      <button class="btn btn-outline btn-sm" onclick="setOperatorName()">👤 ${getOperatorName() === 'Unknown' ? 'Set Operator Name' : getOperatorName()}</button>
+    </div>
+    <div id="ctrl-list" class="ctrl-list"><div class="pin-empty">Loading…</div></div>
+  </div>`;
+}
+
+async function fetchSystemStatus() {
+  const el = document.getElementById('ctrl-list');
+  try {
+    const res = await workerFetch('/system-status');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    _systemStatus = await res.json();
+  } catch (e) {
+    console.error('system-status fetch failed', e);
+    if (el) el.innerHTML = `<div class="pin-empty" style="color:var(--red-light)">System control needs auth wired back in — not available yet</div>`;
+    return;
+  }
+  renderControlList();
+}
+
+function renderControlList() {
+  const el = document.getElementById('ctrl-list');
+  if (!el) return;
+  el.innerHTML = DIVISIONS_CONTROL.map(name => {
+    const s = _systemStatus[name] || { down: false, message: '' };
+    const safeMsg = (s.message || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    const uptime = computeUptime(name, 30);
+    return `<div class="ctrl-row ${s.down ? 'is-down' : ''}">
+      <div class="ctrl-row-top">
+        <div class="ctrl-name">${name}</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:8px;letter-spacing:.1em;color:var(--text-muted)">${uptime.toFixed(2)}% / 30d</span>
+          <div class="ctrl-pill ${s.down ? 'down' : 'up'}">${s.down ? '● Offline' : '● Online'}</div>
+        </div>
+      </div>
+      <input class="form-input ctrl-msg" id="ctrl-msg-${name}" placeholder="Message shown on the down page (optional)…" value="${safeMsg}">
+      <div class="ctrl-row-actions">
+        <button class="btn btn-sm ${s.down ? 'btn-outline' : 'btn-danger'}" onclick="toggleSystem('${name}', ${!s.down})">${s.down ? 'Bring Online' : 'Take Offline'}</button>
+        <button class="btn btn-outline btn-sm" onclick="saveSystemMessage('${name}')">Save Message</button>
+      </div>
+      ${s.updatedAt ? `<div class="ctrl-updated">Last changed ${new Date(s.updatedAt).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'})}${s.user ? ' · ' + s.user : ''}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+async function toggleSystem(name, down) {
+  const msgEl = document.getElementById('ctrl-msg-' + name);
+  const message = msgEl ? msgEl.value.trim() : ((_systemStatus[name] && _systemStatus[name].message) || '');
+  try {
+    const res = await workerFetch(`/system-status/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ down, message })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    _systemStatus[name] = { down, message, updatedAt: new Date().toISOString(), user: getOperatorName() };
+    logIncident(name, down ? 'down' : 'up', message);
+    renderControlList();
+    showToast(`${name} marked ${down ? 'OFFLINE' : 'online'}`);
+  } catch (e) {
+    showToast(`Failed to update ${name}`);
+  }
+}
+
+async function saveSystemMessage(name) {
+  const s = _systemStatus[name] || { down: false, message: '' };
+  const msgEl = document.getElementById('ctrl-msg-' + name);
+  const message = msgEl ? msgEl.value.trim() : '';
+  try {
+    const res = await workerFetch(`/system-status/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ down: s.down, message })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    _systemStatus[name] = { down: s.down, message, updatedAt: new Date().toISOString(), user: getOperatorName() };
+    logIncident(name, 'message', message);
+    showToast(`Message saved for ${name}`);
+  } catch (e) {
+    showToast('Failed to save message');
+  }
+}
+
+async function killAll() {
+  if (!confirm('Take ALL systems offline? Every division dashboard will show Systems Down.')) return;
+  for (const name of DIVISIONS_CONTROL) await toggleSystem(name, true);
+}
+async function restoreAll() {
+  if (!confirm('Bring ALL systems back online?')) return;
+  for (const name of DIVISIONS_CONTROL) await toggleSystem(name, false);
+}
+
+/* ═══════════════════════════════════════════════════
+   PIN ACTIONS
+═══════════════════════════════════════════════════ */
+function selectColor(hex, el) {
+  _selectedColor = hex;
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+  if (el) el.classList.add('selected');
+}
+
+function previewImg(url, imgId, placeholderId) {
+  const img = document.getElementById(imgId);
+  const ph = document.getElementById(placeholderId);
+  if (!url) { img.style.display='none'; ph.style.display='flex'; return; }
+  img.src = url;
+  img.onload = () => { img.style.display='block'; ph.style.display='none'; };
+  img.onerror = () => { img.style.display='none'; ph.style.display='flex'; };
+}
+
+function prefillHouston() {
+  const latEl = document.getElementById('pin-lat');
+  const lngEl = document.getElementById('pin-lng');
+  if (latEl) latEl.value = '29.7604';
+  if (lngEl) lngEl.value = '-95.3698';
+  if (document.getElementById('pin-label') && !document.getElementById('pin-label').value) {
+    document.getElementById('pin-label').value = 'Houston HQ';
+  }
+}
+
+function addPin() {
+  const label = document.getElementById('pin-label')?.value.trim();
+  const lat   = parseFloat(document.getElementById('pin-lat')?.value);
+  const lng   = parseFloat(document.getElementById('pin-lng')?.value);
+  const div   = document.getElementById('pin-division')?.value;
+  const img   = document.getElementById('pin-img')?.value.trim();
+  const notes = document.getElementById('pin-notes')?.value.trim();
+
+  if (!label) { document.getElementById('pin-label').style.borderBottomColor='var(--red-light)'; return; }
+  if (isNaN(lat) || lat < -90 || lat > 90) { document.getElementById('pin-lat').style.borderBottomColor='var(--red-light)'; return; }
+  if (isNaN(lng) || lng < -180 || lng > 180) { document.getElementById('pin-lng').style.borderBottomColor='var(--red-light)'; return; }
+
+  const pin = { id: genId(), label, lat, lng, color: _selectedColor, division: div||'', imageUrl: img||'', notes: notes||'' };
+  _pins.push(pin);
+  savePins();
+  renderPins();
+  showToast('Pin dropped — ' + label);
+  switchPanel('pins', document.querySelectorAll('.ptab')[0]);
+  _highlightedPin = pin.id;
+}
+
+function deletePin(id) {
+  if (!confirm('Remove this pin?')) return;
+  _pins = _pins.filter(p => p.id !== id);
+  savePins();
+  renderPins();
+  renderPinList();
+  showToast('Pin removed');
+}
+
+function focusPin(id) {
+  _highlightedPin = id;
+  renderPinList();
+  // Rotate globe to face pin
+  const pin = _pins.find(p => p.id === id);
+  if (!pin) return;
+  const targetY = -(pin.lng + 180) * (Math.PI / 180);
+  const targetX = -(90 - pin.lat) * (Math.PI / 180) * 0.3;
+  let startY = sphereGroup.rotation.y;
+  let startX = sphereGroup.rotation.x;
+  autoRotate = false;
+  const dur = 800, start = Date.now();
+  function step() {
+    const t = Math.min(1, (Date.now()-start)/dur);
+    const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+    sphereGroup.rotation.y = startY + (targetY - startY) * ease;
+    sphereGroup.rotation.x = startX + (targetX - startX) * ease;
+    if (t < 1) requestAnimationFrame(step);
+    else setTimeout(() => autoRotate = true, 3000);
+  }
+  step();
+}
+
+function openEditPin(id) {
+  const pin = _pins.find(p => p.id === id);
+  if (!pin) return;
+  _editId = id;
+  document.getElementById('edit-modal-body').innerHTML = `
+    <div class="form-group">
+      <label class="form-label">Label</label>
+      <input class="form-input" id="ep-label" value="${pin.label||''}">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Latitude</label>
+        <input class="form-input" id="ep-lat" type="number" step="any" value="${pin.lat}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Longitude</label>
+        <input class="form-input" id="ep-lng" type="number" step="any" value="${pin.lng}">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Division</label>
+      <select class="form-select" id="ep-division">
+        <option value="">— None —</option>
+        ${DIVISIONS.map(d => `<option value="${d}" ${d===pin.division?'selected':''}>${d}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Pin Color</label>
+      <div class="color-row" id="ep-color-row">
+        ${PIN_COLORS.map(c => `<div class="color-swatch ${c.hex===pin.color?'selected':''}" style="background:${c.hex}" title="${c.name}" onclick="selectEditColor('${c.hex}',this)"></div>`).join('')}
+        <input type="color" id="ep-custom-color" value="${pin.color||'#b8953f'}" title="Custom color" style="width:22px;height:22px;border:none;background:none;cursor:pointer;padding:0" onchange="selectEditColor(this.value,null)">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Image URL (optional)</label>
+      <div class="img-preview-wrap">
+        <div class="img-preview-placeholder" id="ep-img-ph" style="${pin.imageUrl?'display:none':''}">◎</div>
+        <img class="img-preview" id="ep-img-prev" src="${pin.imageUrl||''}" style="${pin.imageUrl?'':'display:none'}" alt="preview">
+        <input class="form-input" id="ep-img" value="${pin.imageUrl||''}" placeholder="https://…" oninput="previewImg(this.value,'ep-img-prev','ep-img-ph')" style="flex:1">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes</label>
+      <input class="form-input" id="ep-notes" value="${pin.notes||''}" placeholder="Brief description…">
+    </div>`;
+  _selectedColor = pin.color || PIN_COLORS[0].hex;
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function selectEditColor(hex, el) {
+  _selectedColor = hex;
+  document.querySelectorAll('#ep-color-row .color-swatch').forEach(s => s.classList.remove('selected'));
+  if (el) el.classList.add('selected');
+  const custom = document.getElementById('ep-custom-color');
+  if (custom) custom.value = hex;
+}
+
+function saveEditPin() {
+  const pin = _pins.find(p => p.id === _editId);
+  if (!pin) return;
+  const lat = parseFloat(document.getElementById('ep-lat').value);
+  const lng = parseFloat(document.getElementById('ep-lng').value);
+  if (isNaN(lat)||isNaN(lng)) return;
+  pin.label    = document.getElementById('ep-label').value.trim();
+  pin.lat      = lat;
+  pin.lng      = lng;
+  pin.division = document.getElementById('ep-division').value;
+  pin.imageUrl = document.getElementById('ep-img').value.trim();
+  pin.notes    = document.getElementById('ep-notes').value.trim();
+  pin.color    = _selectedColor;
+  savePins();
+  renderPins();
+  renderPinList();
+  closeEditModal();
+  showToast('Pin updated — ' + pin.label);
+}
+
+function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); _editId=null; }
+function closeEditModalOnOverlay(e) { if(e.target===document.getElementById('edit-modal'))closeEditModal(); }
+
+/* ═══════════════════════════════════════════════════
+   TOAST
+═══════════════════════════════════════════════════ */
+function showToast(msg) {
+  const t = document.createElement('div'); t.className='toast'; t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(),2600);
+}
+
+/* ═══════════════════════════════════════════════════
+   BOOT — gates the dashboard behind the same LVOAuth login
+   the chat room uses, and behind an admin check on top of
+   that (see the AUTH block above for both).
+═══════════════════════════════════════════════════ */
+window.addEventListener('load', () => {
+  document.getElementById('sign-out-btn').addEventListener('click', () => {
+      localStorage.removeItem('lvo_token');
+      localStorage.removeItem('lvo_user');
+      document.cookie = 'lvo_token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 UTC';
+      window.location.replace('/');
+    });
+    boot();
+});
+</script>
+</body>
+</html>

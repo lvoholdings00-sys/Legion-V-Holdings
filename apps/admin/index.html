@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LVO // MASTER ADMIN CONTROL MATRIX</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      color: rgba(255,255,255,0.85);
+      font-family: 'Share Tech Mono', monospace;
+      cursor: crosshair;
+      overflow-x: hidden;
+    }
+    #vanta-bg { position: fixed; inset: 0; z-index: 0; }
+    #app {
+      position: relative;
+      z-index: 10;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 24px 32px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .top-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255,255,255,0.12);
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+    }
+    .back-btn {
+      color: rgba(255,255,255,0.4);
+      text-decoration: none;
+      font-size: 0.75rem;
+      letter-spacing: 0.25em;
+      transition: color 0.2s;
+    }
+    .back-btn:hover { color: #fff; }
+    .page-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 900;
+      letter-spacing: 0.28em;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .admin-badge {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #f87171;
+      font-size: 0.58rem;
+      padding: 3px 8px;
+      letter-spacing: 0.2em;
+    }
+
+    /* Tabs */
+    .tabs-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      padding-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.5);
+      font-family: inherit;
+      font-size: 0.72rem;
+      letter-spacing: 0.2em;
+      padding: 8px 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn:hover {
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+    }
+    .tab-btn.active {
+      background: rgba(255,255,255,0.12);
+      border-color: rgba(255,255,255,0.4);
+      color: #fff;
+    }
+
+    /* Main Container Panel */
+    .admin-panel {
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.12);
+      padding: 24px;
+      position: relative;
+      margin-bottom: 30px;
+    }
+    .admin-panel::before {
+      content: '';
+      position: absolute;
+      top: -2px; left: -2px;
+      width: 18px; height: 18px;
+      border-top: 1px solid rgba(255,255,255,0.4);
+      border-left: 1px solid rgba(255,255,255,0.4);
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .panel-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.95rem;
+      letter-spacing: 0.2em;
+      color: rgba(255,255,255,0.9);
+    }
+    .btn-action {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.25);
+      color: #fff;
+      font-family: inherit;
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      padding: 8px 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-action:hover {
+      background: rgba(255,255,255,0.1);
+      border-color: #fff;
+    }
+
+    /* Table */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.75rem;
+      letter-spacing: 0.12em;
+    }
+    .data-table th {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.15);
+      color: rgba(255,255,255,0.4);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+    }
+    .data-table td {
+      padding: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .status-active { color: #4ade80; }
+    .status-suspended { color: #f87171; }
+
+    .tbl-btn {
+      background: none;
+      border: 1px solid rgba(255,255,255,0.15);
+      color: rgba(255,255,255,0.6);
+      font-family: inherit;
+      font-size: 0.62rem;
+      letter-spacing: 0.15em;
+      padding: 4px 8px;
+      margin-right: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tbl-btn:hover {
+      border-color: rgba(255,255,255,0.5);
+      color: #fff;
+    }
+    .tbl-btn-danger:hover {
+      border-color: #f87171;
+      color: #f87171;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(8px);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      width: 100%;
+      max-width: 520px;
+      background: #08080a;
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 28px;
+      position: relative;
+    }
+    .modal-box::before {
+      content: '';
+      position: absolute;
+      top: -2px; left: -2px;
+      width: 16px; height: 16px;
+      border-top: 1px solid #fff;
+      border-left: 1px solid #fff;
+    }
+    .form-group { margin-bottom: 16px; }
+    .form-label {
+      display: block;
+      font-size: 0.62rem;
+      letter-spacing: 0.2em;
+      color: rgba(255,255,255,0.4);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+    .form-input, .form-select {
+      width: 100%;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.15);
+      padding: 10px 12px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 0.78rem;
+      outline: none;
+    }
+    .form-input:focus, .form-select:focus { border-color: rgba(255,255,255,0.6); }
+
+    .inactivity-status {
+      position: fixed;
+      bottom: 20px;
+      left: 32px;
+      font-size: 0.58rem;
+      letter-spacing: 0.2em;
+      color: rgba(255,255,255,0.2);
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vanta@0.5.24/dist/vanta.clouds2.min.js"></script>
+</head>
+<body>
+  <div id="vanta-bg"></div>
+
+  <div id="app">
+    <div class="top-nav">
+      <a href="/" class="back-btn">&larr; [RETURN TO MENU]</a>
+      <div class="page-title">
+        <span>LVO // COMMAND ARCHIVE</span>
+        <span class="admin-badge">ROOT AUTHORITY</span>
+      </div>
+      <div id="operator-badge" style="font-size: 0.68rem; letter-spacing: 0.2em; color: rgba(255,255,255,0.5);">
+        ADMINISTRATOR VERIFIED
+      </div>
+    </div>
+
+    <!-- Tab bar -->
+    <div class="tabs-bar">
+      <button class="tab-btn active" onclick="switchTab('users')">[01] OPERATOR DIRECTORY & PROVISIONING</button>
+      <button class="tab-btn" onclick="switchTab('messages')">[02] COMMS OVERSIGHT & REDACTION</button>
+      <button class="tab-btn" onclick="switchTab('tickets')">[03] DISPATCH & INCIDENT GOVERNANCE</button>
+      <button class="tab-btn" onclick="switchTab('audit')">[04] SECURITY AUDIT & TELEMETRY</button>
+    </div>
+
+    <!-- TAB 1: USERS -->
+    <div id="tab-users" class="admin-panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">OPERATOR DIRECTORY (INVITE-ONLY PROTOCOL)</div>
+          <div style="font-size: 0.62rem; color: rgba(255,255,255,0.3); margin-top: 4px; letter-spacing: 0.15em;">
+            Public registrations disabled. All accounts exist exclusively via this administration console.
+          </div>
+        </div>
+        <button class="btn-action" onclick="openProvisionModal()">+ PROVISION NEW OPERATOR</button>
+      </div>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>OPERATOR ID</th>
+            <th>ROLE</th>
+            <th>CLEARANCE</th>
+            <th>MFA 2-STEP</th>
+            <th>STATUS</th>
+            <th>LAST LOGIN</th>
+            <th>ADMIN ACTIONS</th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody">
+          <tr><td colspan="7" style="text-align:center; color:rgba(255,255,255,0.3);">Loading operator directory...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- TAB 2: MESSAGES -->
+    <div id="tab-messages" class="admin-panel" style="display:none;">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">COMMUNICATIONS OVERSIGHT & REDACTION</div>
+          <div style="font-size: 0.62rem; color: rgba(255,255,255,0.3); margin-top: 4px; letter-spacing: 0.15em;">
+            Manage and redact any operator message transmitted across classified relays.
+          </div>
+        </div>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>TIMESTAMP</th>
+            <th>CHANNEL</th>
+            <th>SENDER</th>
+            <th>TRANSMISSION CONTENT</th>
+            <th>ACTION</th>
+          </tr>
+        </thead>
+        <tbody id="messages-tbody">
+          <tr><td colspan="5" style="text-align:center; color:rgba(255,255,255,0.3);">Loading transmissions...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- TAB 3: TICKETS -->
+    <div id="tab-tickets" class="admin-panel" style="display:none;">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">DISPATCH & INCIDENT GOVERNANCE</div>
+          <div style="font-size: 0.62rem; color: rgba(255,255,255,0.3); margin-top: 4px; letter-spacing: 0.15em;">
+            Review and resolve all incident tickets filed by all operators.
+          </div>
+        </div>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>OPERATOR</th>
+            <th>TITLE & DETAILS</th>
+            <th>PRIORITY</th>
+            <th>STATUS</th>
+            <th>ACTIONS</th>
+          </tr>
+        </thead>
+        <tbody id="tickets-tbody">
+          <tr><td colspan="6" style="text-align:center; color:rgba(255,255,255,0.3);">Loading incident dispatches...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- TAB 4: AUDIT LOGS -->
+    <div id="tab-audit" class="admin-panel" style="display:none;">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">SECURITY AUDIT & TELEMETRY LOG</div>
+          <div style="font-size: 0.62rem; color: rgba(255,255,255,0.3); margin-top: 4px; letter-spacing: 0.15em;">
+            System-level access attempts, authentication events, and administrative actions.
+          </div>
+        </div>
+        <button class="btn-action" onclick="exportAudit()">EXPORT AUDIT ARCHIVE (JSON)</button>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>TIMESTAMP</th>
+            <th>EVENT</th>
+            <th>OPERATOR / IP</th>
+            <th>DETAILS</th>
+          </tr>
+        </thead>
+        <tbody id="audit-tbody">
+          <tr><td colspan="4" style="text-align:center; color:rgba(255,255,255,0.3);">Loading telemetry logs...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- PROVISION USER MODAL -->
+  <div class="modal-overlay" id="provision-modal">
+    <div class="modal-box">
+      <div style="font-family:'Orbitron',sans-serif; font-size: 1rem; margin-bottom: 16px; letter-spacing: 0.2em;">
+        PROVISION NEW OPERATOR
+      </div>
+      <form onsubmit="handleCreateUser(event)">
+        <div class="form-group">
+          <label class="form-label">OPERATOR IDENTIFIER (USERNAME)</label>
+          <input type="text" id="new-username" class="form-input" placeholder="e.g. sentinel-12" required autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">INITIAL SECURITY PASSPHRASE</label>
+          <input type="text" id="new-password" class="form-input" placeholder="e.g. cipher-gamma-90" required autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">ASSIGNED ROLE</label>
+          <select id="new-role" class="form-select">
+            <option value="operator">Operator (Standard Access)</option>
+            <option value="analyst">Analyst (Elevated Intel Access)</option>
+            <option value="supervisor">Supervisor (Incident Response)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">SECURITY CLEARANCE</label>
+          <select id="new-clearance" class="form-select">
+            <option value="LEVEL-1 (INTERNAL)">LEVEL-1 (INTERNAL)</option>
+            <option value="LEVEL-2 (RESTRICTED)" selected>LEVEL-2 (RESTRICTED)</option>
+            <option value="LEVEL-3 (CONFIDENTIAL)">LEVEL-3 (CONFIDENTIAL)</option>
+            <option value="LEVEL-4 (SECRET)">LEVEL-4 (SECRET)</option>
+            <option value="LEVEL-5 (COMMAND)">LEVEL-5 (COMMAND)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">OPERATOR NOTES / STATION</label>
+          <input type="text" id="new-notes" class="form-input" placeholder="e.g. Tunnel Gateway Node 3 Monitor" />
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap: 10px; margin-top: 24px;">
+          <button type="button" class="tbl-btn" onclick="closeProvisionModal()">CANCEL</button>
+          <button type="submit" class="btn-action">ISSUE OPERATOR CREDENTIALS</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- RESET PASSWORD MODAL -->
+  <div class="modal-overlay" id="password-modal">
+    <div class="modal-box">
+      <div style="font-family:'Orbitron',sans-serif; font-size: 0.95rem; margin-bottom: 16px; letter-spacing: 0.2em;">
+        RESET SECURITY PASSPHRASE // <span id="reset-target-user" style="color:#4ade80;"></span>
+      </div>
+      <form onsubmit="handleResetPassword(event)">
+        <input type="hidden" id="reset-user-id" />
+        <div class="form-group">
+          <label class="form-label">NEW PASSPHRASE</label>
+          <input type="text" id="reset-new-pass" class="form-input" required autocomplete="off" />
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap: 10px; margin-top: 20px;">
+          <button type="button" class="tbl-btn" onclick="closePasswordModal()">CANCEL</button>
+          <button type="submit" class="btn-action">APPLY PASSPHRASE</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="inactivity-status">AUTO-LOCK INACTIVITY TIMER: <span id="timeout-clock">05:00</span></div>
+
+  <script>
+    VANTA.CLOUDS2({
+      el: '#vanta-bg',
+      mouseControls: true, touchControls: false, gyroControls: false,
+      minHeight: 200, minWidth: 200, scale: 1.0,
+      texturePath: "/assets/noise.png",
+      skyColor: 0x000000, cloudColor: 0x222228,
+      cloudShadowColor: 0x050507, sunColor: 0x333340,
+      sunGlareColor: 0x111116, sunLightColor: 0x22222a,
+      speed: 0.6
+    });
+
+    let globalUsers = [];
+    let globalData = {};
+
+    function getAuthToken() {
+      return localStorage.getItem('lvo_token') || getCookie('lvo_token');
+    }
+
+    function getCookie(name) {
+      var match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+      return match ? decodeURIComponent(match[1]) : null;
+    }
+
+    const originalFetch = window.fetch;
+    window.fetch = function(url, options) {
+      options = options || {};
+      options.headers = options.headers || {};
+      const token = getAuthToken();
+      if (token && typeof options.headers.set === 'function') {
+        options.headers.set('Authorization', 'Bearer ' + token);
+      } else if (token && !options.headers['Authorization']) {
+        options.headers['Authorization'] = 'Bearer ' + token;
+      }
+      return originalFetch.call(this, url, options);
+    };
+
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/me');
+        const data = await res.json();
+        if (!data.authenticated || data.user.role !== 'admin') {
+          alert('ACCESS DENIED: Master Administrator credentials required.');
+          localStorage.removeItem('lvo_token');
+          localStorage.removeItem('lvo_user');
+          window.location.replace('/');
+          return;
+        }
+        document.getElementById('operator-badge').textContent =
+          `ROOT: ${data.user.username.toUpperCase()} // ${data.user.clearance}`;
+        loadUsers();
+        loadAllData();
+      } catch (e) {
+        window.location.replace('/');
+      }
+    }
+
+    async function loadUsers() {
+      try {
+        const res = await fetch('/api/admin/users');
+        const data = await res.json();
+        globalUsers = data.users || [];
+        renderUsers();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function loadAllData() {
+      try {
+        const res = await fetch('/api/admin/data');
+        globalData = await res.json();
+        renderMessages();
+        renderTickets();
+        renderAudit();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function renderUsers() {
+      const tbody = document.getElementById('users-tbody');
+      if (!globalUsers.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No operators found.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = globalUsers.map(u => {
+        const isMaster = u.username === 'admin';
+        return `
+          <tr>
+            <td>
+              <strong style="color:#fff;">${u.username}</strong>
+              <div style="font-size:0.6rem; color:rgba(255,255,255,0.3);">${u.id}</div>
+            </td>
+            <td><span style="text-transform:uppercase;">${u.role}</span></td>
+            <td><span style="color:rgba(255,255,255,0.8);">${u.clearance}</span></td>
+            <td>
+              <span style="color:${u.mfaSetup ? '#4ade80' : '#fbbf24'}; font-size:0.68rem;">
+                ${u.mfaSetup ? '● CONFIGURED' : '○ PENDING SETUP'}
+              </span>
+            </td>
+            <td>
+              <span class="${u.status === 'ACTIVE' ? 'status-active' : 'status-suspended'}">
+                ● ${u.status}
+              </span>
+            </td>
+            <td style="font-size:0.68rem; color:rgba(255,255,255,0.4);">
+              ${u.lastLogin ? new Date(u.lastLogin).toLocaleString() : 'NEVER'}
+            </td>
+            <td>
+              ${isMaster ? '<button class="tbl-btn" onclick="resetMfa(\'' + u.id + '\', \'' + u.username + '\')">RESET MFA</button>' : `
+                <button class="tbl-btn" onclick="toggleStatus('${u.id}', '${u.status}')">
+                  ${u.status === 'ACTIVE' ? 'SUSPEND' : 'ACTIVATE'}
+                </button>
+                <button class="tbl-btn" onclick="resetMfa('${u.id}', '${u.username}')">
+                  RESET MFA
+                </button>
+                <button class="tbl-btn" onclick="openResetPassword('${u.id}', '${u.username}')">
+                  RESET PASS
+                </button>
+                <button class="tbl-btn tbl-btn-danger" onclick="deleteUser('${u.id}', '${u.username}')">
+                  PURGE
+                </button>
+              `}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function renderMessages() {
+      const tbody = document.getElementById('messages-tbody');
+      const msgs = globalData.messages || [];
+      if (!msgs.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No transmissions on record.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = msgs.slice().reverse().map(m => `
+        <tr>
+          <td style="font-size:0.68rem; color:rgba(255,255,255,0.4);">${new Date(m.timestamp).toLocaleTimeString()}</td>
+          <td><span style="color:#38bdf8;">#${m.channel}</span></td>
+          <td><strong>${m.senderUsername}</strong></td>
+          <td style="color:rgba(255,255,255,0.85);">${m.text}</td>
+          <td>
+            <button class="tbl-btn tbl-btn-danger" onclick="redactMessage('${m.id}')">REDACT</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function renderTickets() {
+      const tbody = document.getElementById('tickets-tbody');
+      const tickets = globalData.tickets || [];
+      if (!tickets.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No incident dispatches.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = tickets.map(t => `
+        <tr>
+          <td><code>${t.id}</code></td>
+          <td><strong>${t.operatorUsername}</strong></td>
+          <td>
+            <div style="font-weight:bold; color:#fff;">${t.title}</div>
+            <div style="font-size:0.65rem; color:rgba(255,255,255,0.4); margin-top:2px;">${t.description}</div>
+          </td>
+          <td><span style="color:${t.priority === 'CRITICAL' ? '#f87171' : '#fbbf24'};">${t.priority}</span></td>
+          <td><span style="color:${t.status === 'RESOLVED' ? '#4ade80' : '#38bdf8'};">● ${t.status}</span></td>
+          <td>
+            <button class="tbl-btn" onclick="updateTicketStatus('${t.id}', '${t.status === 'OPEN' ? 'RESOLVED' : 'OPEN'}')">
+              MARK ${t.status === 'OPEN' ? 'RESOLVED' : 'OPEN'}
+            </button>
+            <button class="tbl-btn tbl-btn-danger" onclick="deleteTicket('${t.id}')">DELETE</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function renderAudit() {
+      const tbody = document.getElementById('audit-tbody');
+      const logs = globalData.auditLogs || [];
+      if (!logs.length) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No audit logs.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = logs.map(l => `
+        <tr>
+          <td style="font-size:0.68rem; color:rgba(255,255,255,0.4);">${new Date(l.timestamp).toLocaleString()}</td>
+          <td><code style="color:#fbbf24;">${l.event}</code></td>
+          <td>${l.username} <span style="font-size:0.62rem; color:rgba(255,255,255,0.3);">(${l.ip})</span></td>
+          <td style="color:rgba(255,255,255,0.7);">${l.details}</td>
+        </tr>
+      `).join('');
+    }
+
+    function switchTab(name) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+      ['users', 'messages', 'tickets', 'audit'].forEach(t => {
+        document.getElementById('tab-' + t).style.display = (t === name) ? 'block' : 'none';
+      });
+    }
+
+    // Provision User
+    function openProvisionModal() {
+      document.getElementById('provision-modal').classList.add('open');
+    }
+    function closeProvisionModal() {
+      document.getElementById('provision-modal').classList.remove('open');
+    }
+
+    async function handleCreateUser(e) {
+      e.preventDefault();
+      const username = document.getElementById('new-username').value;
+      const password = document.getElementById('new-password').value;
+      const role = document.getElementById('new-role').value;
+      const clearance = document.getElementById('new-clearance').value;
+      const notes = document.getElementById('new-notes').value;
+
+      try {
+        const res = await fetch('/api/admin/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password, role, clearance, notes })
+        });
+        const result = await res.json();
+        if (!res.ok) {
+          alert('ERROR: ' + result.error);
+          return;
+        }
+        alert(`OPERATOR PROVISIONED.\nID: ${result.user.username}\nINVITE CODE: ${result.user.inviteCode}\nCLEARANCE: ${result.user.clearance}`);
+        closeProvisionModal();
+        loadUsers();
+        loadAllData();
+      } catch (err) {
+        alert('Network or server error');
+      }
+    }
+
+    // Toggle Status
+    async function toggleStatus(id, currentStatus) {
+      const newStatus = currentStatus === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
+      try {
+        await fetch('/api/admin/users/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus })
+        });
+        loadUsers();
+        loadAllData();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Reset MFA
+    async function resetMfa(id, username) {
+      if (!confirm(`RESET 2-STEP MFA FOR OPERATOR '${username}'?\n\nThey will be required to scan a fresh QR code and configure authenticator on their next login.`)) return;
+      try {
+        const res = await fetch('/api/admin/users/' + id + '/reset-mfa', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        alert(data.message || 'MFA successfully reset.');
+        loadUsers();
+        loadAllData();
+      } catch (err) {
+        alert('Error resetting MFA');
+      }
+    }
+
+    // Reset Password
+    function openResetPassword(id, username) {
+      document.getElementById('reset-user-id').value = id;
+      document.getElementById('reset-target-user').textContent = username;
+      document.getElementById('reset-new-pass').value = '';
+      document.getElementById('password-modal').classList.add('open');
+    }
+    function closePasswordModal() {
+      document.getElementById('password-modal').classList.remove('open');
+    }
+
+    async function handleResetPassword(e) {
+      e.preventDefault();
+      const id = document.getElementById('reset-user-id').value;
+      const password = document.getElementById('reset-new-pass').value;
+      try {
+        await fetch('/api/admin/users/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        alert('PASSPHRASE UPDATED SUCCESSFULLY.');
+        closePasswordModal();
+      } catch (err) {
+        alert('Error updating password');
+      }
+    }
+
+    // Delete User
+    async function deleteUser(id, username) {
+      if (!confirm(`CONFIRMATION REQUIRED:\nAre you sure you want to completely purge operator '${username}' from directory?`)) return;
+      try {
+        const res = await fetch('/api/admin/users/' + id, { method: 'DELETE' });
+        if (res.ok) {
+          loadUsers();
+          loadAllData();
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Redact Message
+    async function redactMessage(id) {
+      if (!confirm('Redact this transmission from records?')) return;
+      try {
+        await fetch('/api/admin/messages/' + id, { method: 'DELETE' });
+        loadAllData();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Update Ticket
+    async function updateTicketStatus(id, status) {
+      try {
+        await fetch('/api/admin/tickets/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status })
+        });
+        loadAllData();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function deleteTicket(id) {
+      if (!confirm('Delete this dispatch record?')) return;
+      try {
+        await fetch('/api/admin/tickets/' + id, { method: 'DELETE' });
+        loadAllData();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function exportAudit() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(globalData.auditLogs, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", "lvo_audit_archive_" + Date.now() + ".json");
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    }
+
+    // 5-minute auto-logout
+    (function() {
+      var INACTIVITY_TIMEOUT = 5 * 60 * 1000;
+      var last = Date.now();
+      ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'].forEach(function(e){
+        window.addEventListener(e, function(){ last = Date.now(); }, { passive: true });
+      });
+      setInterval(function() {
+        var left = Math.max(0, INACTIVITY_TIMEOUT - (Date.now() - last));
+        var m = Math.floor(left / 60000);
+        var s = Math.floor((left % 60000) / 1000);
+        var el = document.getElementById('timeout-clock');
+        if (el) el.textContent = (m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+        if (left <= 0) {
+          fetch('/api/auth/logout', { method: 'POST' }).finally(function() {
+            localStorage.removeItem('lvo_token');
+            localStorage.removeItem('lvo_user');
+            window.location.replace('/');
+          });
+        }
+      }, 1000);
+    })();
+
+    checkAuth();
+  </script>
+</body>
+</html>

@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+// ── Auth gate: runs immediately before any rendering ──
+(function() {
+  var LOGIN = 'https://lvo-cloud.cloud';
+  var MAX_WAIT_MS = 3000;   // retry window: up to 3s for cookies to arrive
+  var POLL_MS     = 150;    // check every 150ms
+  var waited      = 0;
+
+  function getCookie(name) {
+    var match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+    return match ? decodeURIComponent(match[1]) : null;
+  }
+
+  function kick() {
+    document.cookie = 'lvo_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; domain=.lvo-cloud.cloud; path=/';
+    document.cookie = 'lvo_expiry=; expires=Thu, 01 Jan 1970 00:00:00 UTC; domain=.lvo-cloud.cloud; path=/';
+    window.location.replace(LOGIN);
+  }
+
+  function check() {
+    var token  = getCookie('lvo_token');
+    var expiry = parseInt(getCookie('lvo_expiry') || '0', 10);
+    var valid  = token && expiry && Date.now() < expiry;
+
+    if (valid) {
+      // Authenticated — schedule auto-kick at expiry
+      setTimeout(kick, expiry - Date.now());
+
+      // Re-check on tab focus (handles device sleep / clock drift)
+      document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+          var exp = parseInt(getCookie('lvo_expiry') || '0', 10);
+          if (!exp || Date.now() >= exp) { kick(); }
+        }
+      });
+      return; // all good, stop polling
+    }
+
+    // Not valid yet — retry if still within the wait window
+    waited += POLL_MS;
+    if (waited >= MAX_WAIT_MS) {
+      kick(); // gave up
+    } else {
+      setTimeout(check, POLL_MS);
+    }
+  }
+
+  check();
+})();
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LVO Holdings — Command Center</title>
+<link rel="icon" type="image/png" href="assets/logo.png"/>
+<link rel="apple-touch-icon" href="assets/logo.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /*
+    --brass / --brass-dim are the "accent" pair used everywhere below
+    (buttons, borders, badges, role tags, active states, dots).
+    --bg/--bg-raised/--line/--line-soft/--ink/--ink-dim/--ink-faint/--btn-text
+    are ALSO now set per-division at runtime by applyTheme() below, so a
+    division can run a fully light shell (Careers) instead of just a
+    different accent color on the dark shell. :root just holds sane
+    defaults for first paint before JS runs.
+  */
+  :root{
+    --bg:#0a0a0c; --bg-raised:#111114; --line:#242327; --line-soft:#1a1a1d;
+    --ink:#eae7e0; --ink-dim:#8b8a86; --ink-faint:#5c5b58;
+    --brass:#C8A96E; --brass-dim:#8a7238; --red:#b3564a; --green:#7a9a6f; --radius:2px;
+    --btn-text:#0a0a0c;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--bg);color:var(--ink);font-family:'Inter',system-ui,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased;transition:background .15s,color .15s;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim);}
+  h1,h2,h3{font-family:'Fraunces',serif;font-weight:500;margin:0;}
+  a{color:inherit;text-decoration:none;}
+  button,input,select,textarea{font-family:inherit;color:inherit;}
+  ::selection{background:var(--brass-dim);color:#000;}
+  #app{display:flex;min-height:100vh;}
+
+  .back-menu{
+    display:inline-flex; align-items:center; gap:7px; align-self:flex-start;
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px;
+    letter-spacing:.08em; text-transform:uppercase;
+    color:var(--ink-dim); cursor:pointer;
+    padding:8px 12px; border:1px solid var(--line);
+    background:var(--bg-raised); border-radius:var(--radius);
+    transition:color .15s, border-color .15s, background .15s;
+    margin-bottom:26px;
+  }
+  .back-menu:hover{ color:var(--ink); border-color:var(--brass-dim); }
+  .back-menu .arrow{ font-size:12px; line-height:0; }
+
+  .sidebar{width:280px;flex-shrink:0;background:var(--bg);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:36px 32px 24px;position:sticky;top:0;height:100vh;overflow-y:auto;}
+  .brand-seal{width:34px;height:34px;border:1px solid var(--brass-dim);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:16px;color:var(--brass);margin-bottom:14px;flex-shrink:0;}
+  .brand h1{font-size:22px;letter-spacing:-.01em;color:var(--ink);}
+  .brand .eyebrow{margin-top:4px;}
+  .side-divider{height:1px;background:var(--line);margin:28px 0 22px;}
+  .division-switch{display:flex;flex-direction:column;gap:4px;margin-bottom:26px;}
+  .division-switch .label{margin-bottom:8px;}
+  .division-pill{padding:11px 12px;border:1px solid var(--line);background:var(--bg);color:var(--ink-dim);font-size:14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:background .12s,color .12s,border-color .12s;}
+  .division-pill:hover{color:var(--ink);background:var(--bg-raised);}
+  .division-pill.active{color:var(--ink);background:var(--bg-raised);border-color:var(--brass-dim);}
+  .division-pill .tag{font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--ink-faint);}
+  .division-pill.linked .tag{color:var(--green);}
+  .side-links{display:flex;flex-direction:column;gap:2px;margin-bottom:26px;}
+  .side-link{padding:9px 10px;border-radius:var(--radius);font-size:14.5px;color:var(--ink-dim);display:flex;align-items:center;gap:10px;cursor:pointer;border:1px solid transparent;transition:background .12s,color .12s,border-color .12s;}
+  .side-link:hover{color:var(--ink);background:var(--bg-raised);}
+  .side-link.active{color:var(--ink);background:var(--bg-raised);border-color:var(--line);}
+  .sidebar-footer{margin-top:auto;padding-top:22px;border-top:1px solid var(--line);}
+  .sidebar-footer .who{font-size:13px;color:var(--ink-dim);margin-bottom:2px;}
+  .sidebar-footer .who .name{color:var(--ink);font-weight:500;}
+  .role-tag{display:inline-block;margin-top:8px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--brass);border:1px solid var(--brass-dim);padding:3px 7px;}
+  .signout{margin-top:14px;font-size:13px;color:var(--ink-dim);cursor:pointer;}
+  .signout:hover{color:var(--red);}
+  .main{flex:1;padding:56px 64px;min-width:0;}
+  .main-narrow{max-width:1180px;}
+  .division-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;flex-wrap:wrap;gap:16px;}
+  .tabs{display:flex;gap:28px;border-bottom:1px solid var(--line);margin:30px 0 30px;flex-wrap:wrap;}
+  .tab{padding:10px 2px 14px;font-size:15px;color:var(--ink-dim);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;}
+  .tab.active{color:var(--ink);border-bottom-color:var(--brass);}
+  .card{background:var(--bg-raised);border:1px solid var(--line);padding:22px 24px;position:relative;}
+  .remove-btn{position:absolute;top:20px;right:22px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.05em;color:var(--ink-faint);cursor:pointer;background:none;border:none;padding:0;}
+  .remove-btn:hover{color:var(--red);}
+  .form-card .form-title{margin-bottom:18px;}
+  .form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+  .form-row>*{flex:1;min-width:140px;}
+  .field-label{display:block;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:7px;}
+  input[type=text],input[type=email],input[type=url],input[type=password],select,textarea{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:11px 13px;font-size:14px;border-radius:var(--radius);}
+  textarea{min-height:96px;resize:vertical;font-family:inherit;}
+  input::placeholder,textarea::placeholder{color:var(--ink-faint);}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brass-dim);}
+  select{appearance:none;-webkit-appearance:none;cursor:pointer;background-repeat:no-repeat;background-position:right 13px center;padding-right:32px;}
+  .btn{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.06em;text-transform:uppercase;background:var(--ink);color:var(--btn-text);border:none;padding:12px 20px;cursor:pointer;transition:background .15s,opacity .15s;}
+  .btn:hover{background:var(--brass);color:var(--btn-text);}
+  .btn:disabled{opacity:.35;cursor:not-allowed;}
+  .form-hint{color:var(--ink-faint);font-size:12.5px;margin-top:12px;line-height:1.6;}
+  .form-err{color:var(--red);font-size:12.5px;margin-top:12px;line-height:1.6;}
+  .list-panel{margin-bottom:22px;}
+  .empty-row{color:var(--ink-faint);font-size:14px;padding:6px 0;}
+  .row-item{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid var(--line-soft);gap:16px;flex-wrap:wrap;}
+  .row-item:last-child{border-bottom:none;}
+  .row-item .title{font-weight:500;font-size:15px;}
+  .row-item .sub{color:var(--ink-dim);font-size:13px;margin-top:3px;}
+  .row-actions{display:flex;align-items:center;gap:14px;flex-shrink:0;}
+  .role-select{font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:8px 12px;border-radius:var(--radius);}
+  .mail-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;}
+  .mail-activity-item{padding:12px 0;border-bottom:1px solid var(--line-soft);font-size:13.5px;}
+  .mail-activity-item:last-child{border-bottom:none;}
+  .mail-activity-item .subj{color:var(--ink-dim);margin-top:2px;}
+  .mail-activity-item .ts{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-faint);margin-top:6px;}
+  .badge{font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;border:1px solid var(--brass-dim);color:var(--brass);padding:5px 10px;}
+  .badge.gold{border-color:var(--brass-dim);color:var(--brass);}
+  .badge.in{border-color:var(--green);color:var(--green);}
+  .loading{padding:80px;color:var(--ink-dim);font-family:'IBM Plex Mono',monospace;font-size:13px;}
+  .login-wrap{max-width:420px;margin:100px auto;padding:0 24px;}
+  .login-wrap .brand-seal{margin:0 auto 18px;}
+  .login-wrap .brand{text-align:center;margin-bottom:34px;}
+  .login-wrap .eyebrow{justify-content:center;display:flex;margin-top:6px;}
+  @media (max-width:900px){
+    #app{flex-direction:column;} .sidebar{width:100%;height:auto;position:relative;} .main{padding:32px 24px;}
+    .mail-grid{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div id="app"><div class="loading">Loading Command Center…</div></div>
+
+<script>
+/* =========================================================
+   LVO Holdings — Command Center
+
+   TODO before shipping:
+   1. chatWorker below is a PLACEHOLDER. Paste the deployed URL of
+      your lvo-chat-relay Worker (the one whose source you sent —
+      handleLogin/handleAdminCreateUser/etc). Everything in the
+      "Chat" division depends on this being correct.
+   2. loginUrl below is set to https://lvo-cloud.cloud/ (the MFA
+      gate) based on the screenshot you sent. Confirm that's right —
+      if the "Menu" button should go somewhere else, change it here.
+   3. Careers uses the SAME lvo-worker backend as Alliance/Vindex/Ops,
+      just with division: "Careers". Make sure your D1 data /
+      whatever validates division strings server-side accepts that
+      value — nothing here creates it for you.
+
+   TWO DIFFERENT BACKENDS IN THIS FILE:
+   - Alliance / Vindex / Ops / Careers (kind: "standard") all talk to
+     `worker` (lvo-worker), with the existing per-division
+     email+password -> emailed 6-digit code login flow, and
+     Team/Mailbox/Announcements/Activity tabs backed by
+     /members, /mail, /announcements, /activity.
+   - Chat (kind: "chat") talks to a SEPARATE Worker (`chatWorker`,
+     your lvo-chat-relay) with a different login (no emailed code —
+     POST /login returns a token immediately). Chat now has three
+     tabs of its own: Members (/admin/users), Channels
+     (/admin/channels + /channels/:id for management), and Direct
+     Messages (/admin/dm-threads — metadata only: who's talked to
+     whom and when, never content, since DMs stay end-to-end
+     encrypted). There is no route in that Worker to edit an existing
+     user's role, so Members shows role as a read-only badge rather
+     than inventing a dropdown that has nothing to save to.
+
+   THEMING: applyTheme() sets --brass/--brass-dim (accent) AND the
+   whole --bg/--ink family per division, so a division's `light: true`
+   flag gives it an actual white shell (Careers), not just a lighter
+   accent color on the dark shell everyone else uses.
+========================================================= */
+window.LVO_CONFIG = {
+  worker: "https://lvo-worker.lvoholdings00.workers.dev",
+  chatWorker: "https://lvo-chat-relay.lvoholdings00.workers.dev",
+  loginUrl: "https://lvo-cloud.cloud/",
+  divisions: [
+    { key: "alliance", name: "Alliance",   kind: "standard", workerDiv: "Alliance", accent: "#7F77DD", accentDim: "#5f58a8" },
+    { key: "vindex",   name: "Vindex",     kind: "standard", workerDiv: "Vindex",   accent: "#C8A96E", accentDim: "#8a7238" },
+    { key: "ops",      name: "Operations", kind: "standard", workerDiv: "Ops",      accent: "#1D9E75", accentDim: "#146e53" },
+    { key: "careers",  name: "Careers",    kind: "standard", workerDiv: "Careers",  accent: "#2A2A2E", accentDim: "#5c5b58", light: true },
+    { key: "chat",     name: "Chat",       kind: "chat",     accent: "#4A90D9",     accentDim: "#2f5c8a" }
+  ]
+};
+</script>
+<script>
+(function(){
+  var cfg = window.LVO_CONFIG;
+  var appEl = document.getElementById('app');
+
+  var TIER_LABELS = {1:'Tier I — Principal',2:'Tier II — Associate',3:'Tier III — Partner',4:'Tier IV — Member'};
+
+  var THEMES = {
+    dark:  { bg:'#0a0a0c', bgRaised:'#111114', line:'#242327', lineSoft:'#1a1a1d', ink:'#eae7e0', inkDim:'#8b8a86', inkFaint:'#5c5b58', btnText:'#0a0a0c' },
+    light: { bg:'#f6f5f1', bgRaised:'#ffffff', line:'#e2e0d8', lineSoft:'#ececE6', ink:'#1c1b18', inkDim:'#726f68', inkFaint:'#a7a49c', btnText:'#f6f5f1' }
+  };
+
+  var state = {
+    activeDiv: cfg.divisions[0].key,
+    tab: 'team',
+    tokens: {},        // divKey -> session token (all divisions, incl. chat)
+    users: {},         // divKey -> normalized {firstName,lastName,email,role,tier,id}
+    byDiv: {},         // divKey -> division data blob (shape differs for kind:"chat")
+    pendingLogin: null, // {divKey, userId, email} while waiting on 2FA code (standard divisions only)
+    expandedChannelId: null // which chat channel's member-management panel is open
+  };
+
+  /* ---------------- Theming ---------------- */
+  function applyTheme(divKey){
+    var d = divCfg(divKey) || cfg.divisions[0];
+    document.documentElement.style.setProperty('--brass', d.accent);
+    document.documentElement.style.setProperty('--brass-dim', d.accentDim);
+    var t = d.light ? THEMES.light : THEMES.dark;
+    document.documentElement.style.setProperty('--bg', t.bg);
+    document.documentElement.style.setProperty('--bg-raised', t.bgRaised);
+    document.documentElement.style.setProperty('--line', t.line);
+    document.documentElement.style.setProperty('--line-soft', t.lineSoft);
+    document.documentElement.style.setProperty('--ink', t.ink);
+    document.documentElement.style.setProperty('--ink-dim', t.inkDim);
+    document.documentElement.style.setProperty('--ink-faint', t.inkFaint);
+    document.documentElement.style.setProperty('--btn-text', t.btnText);
+  }
+
+  /* ---------------- Token storage (shared across standard + chat) ---------------- */
+  function tokenKey(divKey){ return 'lvo_cc_token_' + divKey; }
+  function loadTokens(){
+    cfg.divisions.forEach(function(d){
+      var t = localStorage.getItem(tokenKey(d.key));
+      if(t) state.tokens[d.key] = t;
+    });
+  }
+  function saveToken(divKey, token){
+    state.tokens[divKey] = token;
+    localStorage.setItem(tokenKey(divKey), token);
+  }
+  function clearToken(divKey){
+    delete state.tokens[divKey];
+    delete state.users[divKey];
+    localStorage.removeItem(tokenKey(divKey));
+  }
+
+  /* ---------------- lvo-worker fetch helper (standard divisions) ---------------- */
+  async function api(divKey, path, opts){
+    opts = opts || {};
+    var token = state.tokens[divKey];
+    var headers = { 'Content-Type': 'application/json' };
+    if(token) headers['Authorization'] = 'Bearer ' + token;
+    var res = await fetch(cfg.worker + path, { method: opts.method || 'GET', headers: headers, body: opts.body });
+    var data = null;
+    try { data = await res.json(); } catch(_) {}
+    if(!res.ok){
+      var e = new Error((data && data.error) || ('Request failed (' + res.status + ')'));
+      e.status = res.status; e.data = data;
+      if(res.status === 401) clearToken(divKey);
+      throw e;
+    }
+    return data;
+  }
+
+  /* ---------------- lvo-chat-relay fetch helper (Chat division only) ---------------- */
+  async function apiChat(path, opts, tokenOverride){
+    opts = opts || {};
+    var token = tokenOverride !== undefined ? tokenOverride : state.tokens['chat'];
+    var headers = { 'Content-Type': 'application/json' };
+    if(token) headers['Authorization'] = 'Bearer ' + token;
+    var res = await fetch(cfg.chatWorker + path, { method: opts.method || 'GET', headers: headers, body: opts.body });
+    var data = null;
+    try { data = await res.json(); } catch(_) {}
+    if(!res.ok){
+      var e = new Error((data && data.error) || ('Request failed (' + res.status + ')'));
+      e.status = res.status; e.data = data;
+      if(res.status === 401) clearToken('chat');
+      throw e;
+    }
+    return data;
+  }
+
+  /* ---------------- DOM helper ---------------- */
+  function el(tag, attrs, children){
+    var e = document.createElement(tag);
+    attrs = attrs || {};
+    Object.keys(attrs).forEach(function(k){
+      if(k==='class') e.className = attrs[k];
+      else if(k==='html') e.innerHTML = attrs[k];
+      else if(k.indexOf('on')===0) e.addEventListener(k.slice(2), attrs[k]);
+      else if(attrs[k]!==null && attrs[k]!==undefined) e.setAttribute(k, attrs[k]);
+    });
+    (children||[]).forEach(function(c){
+      if(c===null||c===undefined) return;
+      if(typeof c==='string') e.appendChild(document.createTextNode(c));
+      else e.appendChild(c);
+    });
+    return e;
+  }
+
+  function divCfg(key){ return cfg.divisions.filter(function(d){ return d.key===key; })[0]; }
+  function curUser(){ return state.users[state.activeDiv]; }
+  function isLinked(divKey){ return !!state.tokens[divKey] && !!state.users[divKey]; }
+  function curData(){ return state.byDiv[state.activeDiv] || {}; }
+
+  /* ---------------- Data loading (per division) ---------------- */
+  async function loadDivisionData(divKey){
+    var d = divCfg(divKey);
+
+    if(d.kind === 'chat'){
+      var chatEntry = { chatUsers: [], channels: [], dmThreads: [], channelMembersById: {}, loaded: true, error: null };
+      try{
+        var resU = await apiChat('/admin/users', {});
+        chatEntry.chatUsers = resU.users || [];
+        var resC = await apiChat('/admin/channels', {});
+        chatEntry.channels = resC.channels || [];
+        var resD = await apiChat('/admin/dm-threads', {});
+        chatEntry.dmThreads = resD.threads || [];
+      }catch(e){
+        chatEntry.error = e.message;
+      }
+      state.byDiv[divKey] = chatEntry;
+      return;
+    }
+
+    var entry = { members: [], mail: [], announcements: [], activity: [], loaded: true, error: null };
+    try{
+      var results = await Promise.all([
+        api(divKey, '/members'),
+        api(divKey, '/mail'),
+        api(divKey, '/announcements'),
+        api(divKey, '/activity')
+      ]);
+      entry.members = results[0] || [];
+      entry.mail = results[1] || [];
+      entry.announcements = (results[2] || []).filter(function(a){
+        return a.division === d.workerDiv || a.division === 'All';
+      });
+      entry.activity = results[3] || [];
+    }catch(e){
+      entry.error = e.message;
+    }
+    state.byDiv[divKey] = entry;
+  }
+
+  async function refresh(){
+    await loadDivisionData(state.activeDiv);
+    render();
+  }
+
+  async function loadChannelMembersFor(channelId){
+    var data = curData();
+    if(!data.channelMembersById) data.channelMembersById = {};
+    try{
+      var res = await apiChat('/channels/' + encodeURIComponent(channelId) + '/members', {});
+      data.channelMembersById[channelId] = res.members || [];
+    }catch(e){
+      data.channelMembersById[channelId] = null;
+    }
+  }
+
+  async function trySessionRestore(divKey){
+    if(!state.tokens[divKey]) return;
+    var d = divCfg(divKey);
+    try{
+      if(d.kind === 'chat'){
+        var resC = await apiChat('/me', {});
+        state.users[divKey] = { firstName: resC.user.displayName, lastName: '', email: '', role: resC.user.role, tier: null, id: resC.user.id };
+      } else {
+        var res = await api(divKey, '/auth/session');
+        state.users[divKey] = res.user;
+      }
+    }catch(e){
+      clearToken(divKey);
+    }
+  }
+
+  async function switchDivision(divKey){
+    state.activeDiv = divKey;
+    state.tab = 'team';
+    state.expandedChannelId = null;
+    if(isLinked(divKey) && !state.byDiv[divKey]){
+      appEl.innerHTML = '<div class="loading">Loading ' + divCfg(divKey).name + '…</div>';
+      await loadDivisionData(divKey);
+    }
+    render();
+  }
+
+  /* ---------------- Login flow ---------------- */
+  async function submitLogin(divKey, identifier, password, errEl){
+    errEl.textContent = '';
+    var d = divCfg(divKey);
+
+    if(d.kind === 'chat'){
+      try{
+        var data = await apiChat('/login', { method:'POST', body: JSON.stringify({ username: identifier, password: password }) }, null);
+        saveToken('chat', data.token);
+        state.users['chat'] = { firstName: data.user.displayName, lastName: '', email: '', role: data.user.role, tier: null, id: data.user.id };
+        await loadDivisionData('chat');
+        render();
+      }catch(e){
+        errEl.textContent = e.message;
+      }
+      return;
+    }
+
+    try{
+      var res = await fetch(cfg.worker + '/auth/login', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ identifier: identifier, password: password, division: d.workerDiv })
+      });
+      var loginData = await res.json();
+      if(!res.ok) throw new Error(loginData.error || 'Login failed');
+      state.pendingLogin = { divKey: divKey, userId: loginData.userId, email: loginData.email };
+      render();
+    }catch(e){
+      errEl.textContent = e.message;
+    }
+  }
+
+  async function submitCode(divKey, code, errEl){
+    errEl.textContent = '';
+    try{
+      var pending = state.pendingLogin;
+      var res = await fetch(cfg.worker + '/auth/verify', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ userId: pending.userId, code: code, purpose: 'login' })
+      });
+      var data = await res.json();
+      if(!res.ok) throw new Error(data.error || 'Incorrect code');
+      saveToken(divKey, data.token);
+      state.users[divKey] = data.user;
+      state.pendingLogin = null;
+      if(data.user.role !== 'admin'){
+        errEl.textContent = 'Signed in, but this account is not an admin on ' + divCfg(divKey).name + '.';
+      }
+      await loadDivisionData(divKey);
+      render();
+    }catch(e){
+      errEl.textContent = e.message;
+    }
+  }
+
+  function signOutDivision(divKey){
+    var d = divCfg(divKey);
+    if(state.tokens[divKey] && d.kind !== 'chat'){
+      api(divKey, '/auth/logout', {method:'POST'}).catch(function(){});
+    }
+    clearToken(divKey);
+    delete state.byDiv[divKey];
+    render();
+  }
+
+  /* ---------------- Shell ---------------- */
+  function render(){
+    applyTheme(state.activeDiv);
+    appEl.innerHTML = '';
+    appEl.appendChild(renderShell());
+  }
+
+  function renderShell(){
+    var wrap = el('div', {style:'display:flex;width:100%;'});
+    wrap.appendChild(renderSidebar());
+    wrap.appendChild(renderMain());
+    return wrap;
+  }
+
+  function renderSidebar(){
+    var side = el('div', {class:'sidebar'});
+    side.appendChild(el('div', {
+      class:'back-menu',
+      onclick:function(){ window.location.href = cfg.loginUrl; }
+    }, [
+      el('span', {class:'arrow'}, ['\u2190']),
+      el('span', {}, ['Menu'])
+    ]));
+    side.appendChild(el('div', {class:'brand'}, [
+      el('div', {class:'brand-seal'}, ['L']),
+      el('h1', {}, ['LVO Holdings']),
+      el('div', {class:'eyebrow'}, ['Command Center'])
+    ]));
+    side.appendChild(el('div', {class:'side-divider'}));
+
+    var switcher = el('div', {class:'division-switch'});
+    switcher.appendChild(el('div', {class:'eyebrow label'}, ['Divisions']));
+    cfg.divisions.forEach(function(d){
+      var linked = isLinked(d.key);
+      switcher.appendChild(el('div', {
+        class:'division-pill' + (state.activeDiv===d.key ? ' active' : '') + (linked ? ' linked' : ''),
+        onclick:function(){ switchDivision(d.key); }
+      }, [
+        el('span', {}, [d.name]),
+        el('span', {class:'tag'}, [linked ? 'LINKED' : 'SIGN IN'])
+      ]));
+    });
+    side.appendChild(switcher);
+    side.appendChild(el('div', {class:'side-divider'}));
+
+    var activeCfg = divCfg(state.activeDiv);
+    if(isLinked(state.activeDiv)){
+      var tabs = activeCfg.kind === 'chat'
+        ? [{id:'team', label:'Members'}, {id:'channels', label:'Channels'}, {id:'dms', label:'Direct Messages'}]
+        : [{id:'team', label:'Team'}, {id:'mailbox', label:'Mailbox'}, {id:'announcements', label:'Announcements'}, {id:'activity', label:'Activity'}];
+      var links = el('div', {class:'side-links'});
+      tabs.forEach(function(t){
+        links.appendChild(el('div', {class:'side-link' + (state.tab===t.id?' active':''), onclick:function(){ state.tab=t.id; state.expandedChannelId=null; render(); }}, [t.label]));
+      });
+      side.appendChild(links);
+    }
+
+    var footer = el('div', {class:'sidebar-footer'});
+    var u = curUser();
+    if(u){
+      footer.appendChild(el('div', {class:'who'}, [el('span', {class:'name'}, [((u.firstName||'') + ' ' + (u.lastName||'')).trim()])]));
+      if(u.email) footer.appendChild(el('div', {class:'who', style:'font-size:12px;'}, [u.email]));
+      footer.appendChild(el('span', {class:'role-tag'}, [u.role === 'admin' ? 'Administrator' : (TIER_LABELS[u.tier]||'Member')]));
+      footer.appendChild(el('div', {class:'signout', onclick:function(){ signOutDivision(state.activeDiv); }}, ['Sign out of ' + activeCfg.name]));
+    } else {
+      footer.appendChild(el('div', {class:'who'}, ['Not signed in to ' + activeCfg.name]));
+    }
+    side.appendChild(footer);
+    return side;
+  }
+
+  function renderMain(){
+    var main = el('div', {class:'main main-narrow'});
+    var d = divCfg(state.activeDiv);
+
+    main.appendChild(el('div', {class:'division-head'}, [
+      el('div', {}, [
+        el('div', {class:'eyebrow'}, [d.name.toUpperCase()]),
+        el('h3', {}, [d.name])
+      ])
+    ]));
+
+    if(!isLinked(state.activeDiv)){
+      main.appendChild(renderLogin(state.activeDiv));
+      return main;
+    }
+
+    var u = curUser();
+    if(u.role !== 'admin'){
+      main.appendChild(el('div', {class:'card'}, [
+        el('div', {class:'eyebrow', style:'margin-bottom:10px;'}, ['Not authorized']),
+        el('div', {style:'color:var(--ink-dim);font-size:14px;line-height:1.6;'}, ['This account is signed in but is not an admin on ' + d.name + '. Admin actions require role = admin.'])
+      ]));
+      return main;
+    }
+
+    var data = curData();
+    if(!data.loaded){
+      main.appendChild(el('div', {class:'loading'}, ['Loading ' + d.name + ' data…']));
+      loadDivisionData(state.activeDiv).then(render);
+      return main;
+    }
+    if(data.error){
+      main.appendChild(el('div', {class:'card'}, [
+        el('div', {class:'eyebrow', style:'color:var(--red);margin-bottom:10px;'}, ['Load error']),
+        el('div', {style:'color:var(--ink-dim);font-size:14px;'}, [data.error])
+      ]));
+      return main;
+    }
+
+    if(d.kind === 'chat'){
+      if(state.tab==='team') main.appendChild(renderChatTeam());
+      if(state.tab==='channels') main.appendChild(renderChatChannels());
+      if(state.tab==='dms') main.appendChild(renderChatDms());
+      return main;
+    }
+
+    if(state.tab==='team') main.appendChild(renderTeam());
+    if(state.tab==='mailbox') main.appendChild(renderMailbox());
+    if(state.tab==='announcements') main.appendChild(renderAnnouncements());
+    if(state.tab==='activity') main.appendChild(renderActivity());
+    return main;
+  }
+
+  /* ---------------- Login form ---------------- */
+  function renderLogin(divKey){
+    var d = divCfg(divKey);
+    var wrap = el('div', {class:'login-wrap'});
+
+    if(d.kind === 'chat'){
+      var uI = el('input', {type:'text', placeholder:'Username'});
+      var pI = el('input', {type:'password', placeholder:'Password'});
+      var errC = el('div', {class:'form-err'});
+      wrap.appendChild(el('div', {class:'card form-card'}, [
+        el('div', {class:'eyebrow form-title'}, ['Sign in — Chat']),
+        el('div', {style:'margin-bottom:14px;'}, [el('label', {class:'field-label'}, ['Username']), uI]),
+        el('div', {style:'margin-bottom:18px;'}, [el('label', {class:'field-label'}, ['Password']), pI]),
+        el('button', {class:'btn', style:'width:100%;', onclick:function(){ submitLogin('chat', uI.value.trim(), pI.value, errC); }}, ['Continue']),
+        errC,
+        el('div', {class:'form-hint'}, ['Uses your existing Chat admin account. No emailed code — sign-in is immediate.'])
+      ]));
+      return wrap;
+    }
+
+    if(state.pendingLogin && state.pendingLogin.divKey === divKey){
+      var codeI = el('input', {type:'text', style:'letter-spacing:.4em;text-align:center;font-family:\'IBM Plex Mono\',monospace;font-size:20px;', placeholder:'000000', maxlength:'6'});
+      var errEl = el('div', {class:'form-err'});
+      wrap.appendChild(el('div', {class:'card form-card'}, [
+        el('div', {class:'eyebrow form-title'}, ['Verification code sent to ' + state.pendingLogin.email]),
+        el('div', {style:'margin-bottom:18px;'}, [codeI]),
+        el('button', {class:'btn', style:'width:100%;', onclick:function(){ submitCode(divKey, codeI.value.trim(), errEl); }}, ['Verify & sign in']),
+        errEl,
+        el('div', {class:'form-hint'}, ['Check the inbox for the account you just signed in with. Code expires in 10 minutes.'])
+      ]));
+      return wrap;
+    }
+
+    var idI = el('input', {type:'text', placeholder:'Email or username'});
+    var pwI = el('input', {type:'password', placeholder:'Password'});
+    var errEl2 = el('div', {class:'form-err'});
+    wrap.appendChild(el('div', {class:'card form-card'}, [
+      el('div', {class:'eyebrow form-title'}, ['Sign in — ' + d.name]),
+      el('div', {style:'margin-bottom:14px;'}, [el('label', {class:'field-label'}, ['Identifier']), idI]),
+      el('div', {style:'margin-bottom:18px;'}, [el('label', {class:'field-label'}, ['Password']), pwI]),
+      el('button', {class:'btn', style:'width:100%;', onclick:function(){ submitLogin(divKey, idI.value.trim(), pwI.value, errEl2); }}, ['Continue']),
+      errEl2,
+      el('div', {class:'form-hint'}, ['Uses your existing ' + d.name + ' admin account. A 6-digit code will be emailed to confirm sign-in.'])
+    ]));
+    return wrap;
+  }
+
+  /* ---------------- Team (= /members, standard divisions incl. Careers) ---------------- */
+  function renderTeam(){
+    var wrap = el('div');
+    var DK = state.activeDiv;
+    var data = curData();
+    var panel = el('div', {class:'card list-panel'});
+    if(data.members.length===0) panel.appendChild(el('div', {class:'empty-row'}, ['No members yet.']));
+
+    data.members.forEach(function(m){
+      var tierSel = el('select', {class:'role-select'}, Object.keys(TIER_LABELS).map(function(k){
+        return el('option', {value:k}, [TIER_LABELS[k]]);
+      }));
+      tierSel.value = String(m.tier || 4);
+      var roleSel = el('select', {class:'role-select'}, [
+        el('option', {value:'member'}, ['Member']), el('option', {value:'admin'}, ['Admin'])
+      ]);
+      roleSel.value = m.role === 'admin' ? 'admin' : 'member';
+
+      var saveBtn = el('button', {class:'btn', style:'padding:8px 14px;', onclick:async function(){
+        try{
+          await api(DK, '/members/' + m.uid, { method:'PUT', body: JSON.stringify({ tier: parseInt(tierSel.value), role: roleSel.value }) });
+          await refresh();
+        }catch(e){ alert('Failed: ' + e.message); }
+      }}, ['Save']);
+
+      panel.appendChild(el('div', {class:'row-item'}, [
+        el('div', {}, [el('div', {class:'title'}, [m.name || 'Unknown']), el('div', {class:'sub'}, [m.email || ''])]),
+        el('div', {class:'row-actions'}, [
+          tierSel, roleSel, saveBtn,
+          el('button', {class:'remove-btn', onclick:async function(){
+            if(!confirm('Remove ' + (m.name||'this member') + '?')) return;
+            try{ await api(DK, '/members/' + m.uid, {method:'DELETE'}); await refresh(); }
+            catch(e){ alert('Failed: ' + e.message); }
+          }}, ['Remove'])
+        ])
+      ]));
+    });
+    wrap.appendChild(panel);
+
+    var firstI=el('input',{type:'text',placeholder:'First name'}), lastI=el('input',{type:'text',placeholder:'Last name'});
+    var userI=el('input',{type:'text',placeholder:'username'}), emailI=el('input',{type:'text',placeholder:'name@company.com'});
+    var tierNewSel = el('select', {}, Object.keys(TIER_LABELS).map(function(k){ return el('option', {value:k}, [TIER_LABELS[k]]); }));
+    tierNewSel.value = '4';
+    var roleNewSel = el('select', {}, [el('option', {value:'member'}, ['Member']), el('option', {value:'admin'}, ['Admin'])]);
+    var createErr = el('div', {class:'form-err'});
+    wrap.appendChild(el('div', {class:'card form-card'}, [
+      el('div', {class:'eyebrow form-title'}, ['Create member']),
+      el('div', {class:'form-row'}, [firstI, lastI]),
+      el('div', {class:'form-row'}, [userI, emailI]),
+      el('div', {class:'form-row'}, [tierNewSel, roleNewSel, el('button', {class:'btn', style:'flex:0 0 auto;', onclick:async function(){
+        createErr.textContent = '';
+        if(!firstI.value.trim() || !lastI.value.trim() || !userI.value.trim() || !emailI.value.trim()){
+          createErr.textContent = 'First name, last name, username, and email are all required.';
+          return;
+        }
+        try{
+          await api(DK, '/members', { method:'POST', body: JSON.stringify({
+            firstName: firstI.value.trim(), lastName: lastI.value.trim(),
+            username: userI.value.trim(), email: emailI.value.trim(),
+            tier: parseInt(tierNewSel.value), role: roleNewSel.value
+          })});
+          firstI.value=lastI.value=userI.value=emailI.value='';
+          await refresh();
+        }catch(e){ createErr.textContent = e.message; }
+      }}, ['Create & email credentials'])]),
+      createErr,
+      el('div', {class:'form-hint'}, ['A temporary password is generated and emailed automatically. The new account is pre-verified — no signup step needed.'])
+    ]));
+    return wrap;
+  }
+
+  /* ---------------- Chat "Members" (= /admin/users on lvo-chat-relay) ---------------- */
+  function renderChatTeam(){
+    var wrap = el('div');
+    var data = curData();
+    var users = data.chatUsers || [];
+    var panel = el('div', {class:'card list-panel'});
+    if(users.length===0) panel.appendChild(el('div', {class:'empty-row'}, ['No chat accounts yet.']));
+
+    users.forEach(function(u){
+      panel.appendChild(el('div', {class:'row-item'}, [
+        el('div', {}, [
+          el('div', {class:'title'}, [u.displayName || u.id]),
+          el('div', {class:'sub'}, ['@' + u.id + (u.mustChangePassword ? ' · must change password' : '')])
+        ]),
+        el('div', {class:'row-actions'}, [
+          el('span', {class:'badge' + (u.role==='admin' ? ' gold' : '')}, [u.role === 'admin' ? 'Admin' : 'Member']),
+          el('button', {class:'btn', style:'padding:8px 14px;', onclick:async function(){
+            var pw = prompt('New password for ' + (u.displayName||u.id) + ' (min 8 characters):');
+            if(pw === null) return;
+            if(pw.length < 8){ alert('Password must be at least 8 characters.'); return; }
+            try{
+              await apiChat('/admin/users/' + encodeURIComponent(u.id) + '/reset-password', { method:'POST', body: JSON.stringify({ newPassword: pw }) });
+              alert('Password reset. They\u2019ll be asked to change it on next login.');
+            }catch(e){ alert('Failed: ' + e.message); }
+          }}, ['Reset password']),
+          el('button', {class:'remove-btn', onclick:async function(){
+            if(!confirm('Remove ' + (u.displayName||u.id) + ' from Chat?')) return;
+            try{ await apiChat('/admin/users/' + encodeURIComponent(u.id), {method:'DELETE'}); await refresh(); }
+            catch(e){ alert('Failed: ' + e.message); }
+          }}, ['Remove'])
+        ])
+      ]));
+    });
+    wrap.appendChild(panel);
+
+    var userI = el('input', {type:'text', placeholder:'username (lowercase, 3-32 chars)'});
+    var nameI = el('input', {type:'text', placeholder:'Display name (optional)'});
+    var pwI = el('input', {type:'password', placeholder:'Temporary password (8+ chars)'});
+    var roleSel = el('select', {}, [el('option',{value:'member'},['Member']), el('option',{value:'admin'},['Admin'])]);
+    var createErr = el('div', {class:'form-err'});
+    wrap.appendChild(el('div', {class:'card form-card'}, [
+      el('div', {class:'eyebrow form-title'}, ['Create chat account']),
+      el('div', {class:'form-row'}, [userI, nameI]),
+      el('div', {class:'form-row'}, [pwI, roleSel, el('button', {class:'btn', style:'flex:0 0 auto;', onclick:async function(){
+        createErr.textContent = '';
+        if(!userI.value.trim() || !pwI.value){ createErr.textContent = 'Username and password are required.'; return; }
+        if(pwI.value.length < 8){ createErr.textContent = 'Password must be at least 8 characters.'; return; }
+        try{
+          await apiChat('/admin/users', { method:'POST', body: JSON.stringify({
+            username: userI.value.trim(),
+            password: pwI.value,
+            displayName: nameI.value.trim() || undefined,
+            role: roleSel.value
+          })});
+          userI.value = nameI.value = pwI.value = '';
+          await refresh();
+        }catch(e){ createErr.textContent = e.message; }
+      }}, ['Create account'])]),
+      createErr,
+      el('div', {class:'form-hint'}, ['They\u2019ll be asked to change this password the first time they sign in. Nothing is emailed automatically — share the temporary password with them directly.'])
+    ]));
+    return wrap;
+  }
+
+  /* ---------------- Chat "Channels" (= /admin/channels + /channels/:id on lvo-chat-relay) ---------------- */
+  function renderChatChannels(){
+    var wrap = el('div');
+    var data = curData();
+    var channels = data.channels || [];
+    var panel = el('div', {class:'card list-panel'});
+    if(channels.length===0) panel.appendChild(el('div', {class:'empty-row'}, ['No channels yet.']));
+
+    channels.forEach(function(ch){
+      var last = ch.lastActivity ? new Date(ch.lastActivity).toLocaleString() : 'no messages yet';
+      var isExpanded = state.expandedChannelId === ch.id;
+
+      panel.appendChild(el('div', {class:'row-item'}, [
+        el('div', {}, [
+          el('div', {class:'title'}, [(ch.type==='announcement' ? '\u{1F4E3} ' : '# ') + ch.name, ' ', el('span', {class:'badge'}, [ch.type])]),
+          el('div', {class:'sub'}, [ch.memberCount + ' member' + (ch.memberCount===1?'':'s') + ' \u00b7 ' + ch.messageCount + ' message' + (ch.messageCount===1?'':'s') + ' \u00b7 last: ' + last])
+        ]),
+        el('div', {class:'row-actions'}, [
+          el('button', {class:'btn', style:'padding:8px 14px;', onclick:async function(){
+            if(isExpanded){ state.expandedChannelId = null; render(); return; }
+            state.expandedChannelId = ch.id;
+            render();
+            await loadChannelMembersFor(ch.id);
+            render();
+          }}, [isExpanded ? 'Hide' : 'Manage']),
+          ch.id !== 'general' ? el('button', {class:'remove-btn', onclick:async function(){
+            if(!confirm('Delete channel "' + ch.name + '"? This removes it for everyone.')) return;
+            try{ await apiChat('/channels/' + encodeURIComponent(ch.id), {method:'DELETE'}); state.expandedChannelId = null; await refresh(); }
+            catch(e){ alert('Failed: ' + e.message); }
+          }}, ['Delete']) : null
+        ])
+      ]));
+
+      if(isExpanded){
+        var members = (data.channelMembersById || {})[ch.id];
+        var sub = el('div', {class:'card', style:'margin:-6px 0 16px;background:var(--bg);'});
+        if(members === undefined){
+          sub.appendChild(el('div', {class:'empty-row'}, ['Loading members\u2026']));
+        } else if(members === null){
+          sub.appendChild(el('div', {class:'empty-row'}, ['Could not load members.']));
+        } else {
+          if(members.length===0) sub.appendChild(el('div', {class:'empty-row'}, ['No members.']));
+          members.forEach(function(m){
+            var actionEls = [];
+            if(ch.type === 'announcement'){
+              var cb = el('input', {type:'checkbox'});
+              cb.checked = !!m.canPost;
+              cb.addEventListener('change', async function(){
+                try{
+                  await apiChat('/channels/' + encodeURIComponent(ch.id), { method:'PATCH', body: JSON.stringify({ setCanPost: { userId: m.id, canPost: cb.checked } }) });
+                }catch(e){ alert('Failed: ' + e.message); cb.checked = !cb.checked; }
+              });
+              actionEls.push(el('label', {style:'display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-dim);'}, [cb, 'can post']));
+            }
+            actionEls.push(el('button', {class:'btn', style:'padding:6px 12px;', onclick:async function(){
+              try{
+                await apiChat('/channels/' + encodeURIComponent(ch.id), { method:'PATCH', body: JSON.stringify({ removeMemberIds: [m.id] }) });
+                await loadChannelMembersFor(ch.id);
+                await refresh();
+                state.expandedChannelId = ch.id;
+                render();
+              }catch(e){ alert('Failed: ' + e.message); }
+            }}, ['Remove']));
+            sub.appendChild(el('div', {class:'row-item'}, [
+              el('div', {}, [el('div', {class:'title'}, [m.displayName]), el('div', {class:'sub'}, ['@' + m.id])]),
+              el('div', {class:'row-actions'}, actionEls)
+            ]));
+          });
+
+          var existingIds = {};
+          members.forEach(function(m){ existingIds[m.id] = true; });
+          var candidates = (data.chatUsers || []).filter(function(u){ return !existingIds[u.id]; });
+          if(candidates.length){
+            var addSel = el('select', {}, candidates.map(function(u){ return el('option', {value:u.id}, [u.displayName || u.id]); }));
+            sub.appendChild(el('div', {class:'form-row', style:'margin-top:14px;'}, [
+              addSel,
+              el('button', {class:'btn', style:'flex:0 0 auto;', onclick:async function(){
+                try{
+                  await apiChat('/channels/' + encodeURIComponent(ch.id), { method:'PATCH', body: JSON.stringify({ addMemberIds: [addSel.value] }) });
+                  await loadChannelMembersFor(ch.id);
+                  await refresh();
+                  state.expandedChannelId = ch.id;
+                  render();
+                }catch(e){ alert('Failed: ' + e.message); }
+              }}, ['Add member'])
+            ]));
+          }
+        }
+        panel.appendChild(sub);
+      }
+    });
+    wrap.appendChild(panel);
+
+    var nameI = el('input', {type:'text', placeholder:'Channel name'});
+    var typeSel = el('select', {}, [el('option', {value:'group'}, ['Group']), el('option', {value:'announcement'}, ['Announcement'])]);
+    var checkboxes = [];
+    var memberBox = el('div', {style:'display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;margin:4px 0 14px;padding:10px;border:1px solid var(--line);border-radius:var(--radius);'});
+    (data.chatUsers || []).forEach(function(u){
+      var cb = el('input', {type:'checkbox', value:u.id});
+      checkboxes.push(cb);
+      memberBox.appendChild(el('label', {style:'display:flex;align-items:center;gap:8px;font-size:13.5px;'}, [cb, u.displayName || u.id]));
+    });
+    var createErr = el('div', {class:'form-err'});
+    wrap.appendChild(el('div', {class:'card form-card'}, [
+      el('div', {class:'eyebrow form-title'}, ['Create channel']),
+      el('div', {class:'form-row'}, [nameI, typeSel]),
+      el('label', {class:'field-label'}, ['Members']),
+      memberBox,
+      el('button', {class:'btn', onclick:async function(){
+        createErr.textContent = '';
+        if(!nameI.value.trim()){ createErr.textContent = 'Channel name is required.'; return; }
+        var memberIds = checkboxes.filter(function(cb){ return cb.checked; }).map(function(cb){ return cb.value; });
+        try{
+          await apiChat('/channels', { method:'POST', body: JSON.stringify({ name: nameI.value.trim(), type: typeSel.value, memberIds: memberIds }) });
+          nameI.value = '';
+          checkboxes.forEach(function(cb){ cb.checked = false; });
+          await refresh();
+        }catch(e){ createErr.textContent = e.message; }
+      }}, ['Create channel']),
+      createErr,
+      el('div', {class:'form-hint'}, ['Group: everyone added can post. Announcement: only you can post at first \u2014 grant posting rights to specific members afterward from Manage.'])
+    ]));
+    return wrap;
+  }
+
+  /* ---------------- Chat "Direct Messages" (= /admin/dm-threads on lvo-chat-relay, metadata only) ---------------- */
+  function renderChatDms(){
+    var wrap = el('div');
+    var data = curData();
+    var threads = data.dmThreads || [];
+    wrap.appendChild(el('div', {class:'form-hint', style:'margin-bottom:18px;'}, ['Direct messages stay end-to-end encrypted \u2014 this shows only who\u2019s talked to whom and when, never message content.']));
+    var panel = el('div', {class:'card list-panel'});
+    if(threads.length===0) panel.appendChild(el('div', {class:'empty-row'}, ['No direct-message activity yet.']));
+    threads.forEach(function(t){
+      panel.appendChild(el('div', {class:'row-item'}, [
+        el('div', {}, [
+          el('div', {class:'title'}, [t.userA.displayName + ' \u2194 ' + t.userB.displayName]),
+          el('div', {class:'sub'}, ['last activity: ' + new Date(t.lastActivity).toLocaleString()])
+        ])
+      ]));
+    });
+    wrap.appendChild(panel);
+    return wrap;
+  }
+
+  /* ---------------- Mailbox (= /mail) ---------------- */
+  function renderMailbox(){
+    var wrap = el('div', {class:'mail-grid'});
+    var DK = state.activeDiv;
+    var data = curData();
+    var toI=el('input',{type:'text',placeholder:'name@company.com'}), subjI=el('input',{type:'text'}), msgI=el('textarea',{});
+    var sendErr = el('div', {class:'form-err'});
+    var compose = el('div', {class:'card form-card'}, [
+      el('div', {class:'eyebrow form-title'}, ['Compose']),
+      el('div', {style:'margin-bottom:16px;'}, [el('label', {class:'field-label'}, ['To']), toI]),
+      el('div', {style:'margin-bottom:16px;'}, [el('label', {class:'field-label'}, ['Subject']), subjI]),
+      el('div', {style:'margin-bottom:20px;'}, [el('label', {class:'field-label'}, ['Message']), msgI]),
+      el('button', {class:'btn', onclick:async function(){
+        sendErr.textContent = '';
+        if(!toI.value.trim() || !subjI.value.trim() || !msgI.value.trim()){
+          sendErr.textContent = 'To, subject, and message are all required.'; return;
+        }
+        try{
+          await api(DK, '/mail', { method:'POST', body: JSON.stringify({ to: toI.value.trim(), subject: subjI.value.trim(), body: msgI.value.trim() }) });
+          toI.value=subjI.value=msgI.value='';
+          await refresh();
+        }catch(e){ sendErr.textContent = e.message; }
+      }}, ['Send mail']),
+      sendErr
+    ]);
+    var activity = el('div');
+    activity.appendChild(el('div', {class:'eyebrow', style:'margin-bottom:16px;'}, ['Mailbox activity']));
+    var panel = el('div', {class:'card'});
+    if(data.mail.length===0) panel.appendChild(el('div', {class:'empty-row'}, ['No mail on file yet.']));
+    data.mail.forEach(function(mm){
+      var dirLabel = mm.direction === 'inbound' ? 'From ' + mm.from_addr : 'To ' + mm.to_addr;
+      panel.appendChild(el('div', {class:'mail-activity-item'}, [
+        el('div', {}, [el('span', {class:'badge ' + (mm.direction==='inbound'?'in':'gold')}, [mm.direction==='inbound'?'Received':'Sent']), ' ', dirLabel]),
+        el('div', {class:'subj'}, [mm.subject]),
+        el('div', {class:'ts'}, [new Date(mm.created_at).toLocaleString()])
+      ]));
+    });
+    activity.appendChild(panel);
+    wrap.appendChild(compose); wrap.appendChild(activity);
+    return wrap;
+  }
+
+  /* ---------------- Announcements ---------------- */
+  function renderAnnouncements(){
+    var wrap = el('div');
+    var DK = state.activeDiv;
+    var d = divCfg(DK);
+    var data = curData();
+    var panel = el('div', {class:'card list-panel'});
+    if(data.announcements.length===0) panel.appendChild(el('div', {class:'empty-row'}, ['No announcements yet.']));
+    data.announcements.forEach(function(a){
+      panel.appendChild(el('div', {class:'row-item'}, [
+        el('div', {}, [
+          el('div', {class:'title'}, [(a.pinned?'\u25C8 ':'') + a.title]),
+          el('div', {class:'sub'}, [a.body])
+        ]),
+        el('div', {class:'row-actions'}, [
+          el('button', {class:'btn', style:'padding:8px 14px;', onclick:async function(){
+            try{ await api(DK, '/announcements/' + a.id + '/pin', {method:'PUT', body: JSON.stringify({pinned: !a.pinned})}); await refresh(); }
+            catch(e){ alert('Failed: ' + e.message); }
+          }}, [a.pinned ? 'Unpin' : 'Pin']),
+          el('button', {class:'remove-btn', onclick:async function(){
+            if(!confirm('Delete this announcement?')) return;
+            try{ await api(DK, '/announcements/' + a.id, {method:'DELETE'}); await refresh(); }
+            catch(e){ alert('Failed: ' + e.message); }
+          }}, ['Delete'])
+        ])
+      ]));
+    });
+    wrap.appendChild(panel);
+
+    var titleI=el('input',{type:'text',placeholder:'Title'}), bodyI=el('textarea',{placeholder:'Body'});
+    var postErr = el('div', {class:'form-err'});
+    wrap.appendChild(el('div', {class:'card form-card'}, [
+      el('div', {class:'eyebrow form-title'}, ['Post announcement — ' + d.name]),
+      el('div', {style:'margin-bottom:14px;'}, [titleI]),
+      el('div', {style:'margin-bottom:18px;'}, [bodyI]),
+      el('button', {class:'btn', onclick:async function(){
+        postErr.textContent = '';
+        if(!titleI.value.trim() || !bodyI.value.trim()){ postErr.textContent = 'Title and body required.'; return; }
+        try{
+          await api(DK, '/announcements', { method:'POST', body: JSON.stringify({ title: titleI.value.trim(), body: bodyI.value.trim(), division: d.workerDiv }) });
+          titleI.value = bodyI.value = '';
+          await refresh();
+        }catch(e){ postErr.textContent = e.message; }
+      }}, ['Post']),
+      postErr
+    ]));
+    return wrap;
+  }
+
+  /* ---------------- Activity ---------------- */
+  function renderActivity(){
+    var wrap = el('div');
+    var data = curData();
+    var panel = el('div', {class:'card list-panel'});
+    if(data.activity.length===0) panel.appendChild(el('div', {class:'empty-row'}, ['No activity yet.']));
+    data.activity.forEach(function(a){
+      panel.appendChild(el('div', {class:'row-item'}, [
+        el('div', {}, [
+          el('div', {class:'title'}, [a.action]),
+          el('div', {class:'sub'}, [(a.actor||'') + ' · ' + new Date(a.time).toLocaleString()])
+        ]),
+        a.is_admin_action ? el('span', {class:'badge gold'}, ['Admin']) : null
+      ]));
+    });
+    wrap.appendChild(panel);
+    return wrap;
+  }
+
+  /* ---------------- Boot ---------------- */
+  async function boot(){
+    applyTheme(state.activeDiv);
+    loadTokens();
+    var keys = Object.keys(state.tokens);
+    if(keys.length){
+      await Promise.all(keys.map(trySessionRestore));
+    }
+    if(isLinked(state.activeDiv)){
+      await loadDivisionData(state.activeDiv);
+    }
+    render();
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>LVO-CLOUD</title>
+  <meta name="description" content="Classified access terminal portal for LVO Holdings." />
+  <meta property="og:title" content="LVO" />
+  <meta property="og:description" content="Classified access terminal portal for LVO Holdings." />
+
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
+  
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: 'Share Tech Mono', monospace;
+      cursor: crosshair;
+    }
+
+    /* Vanta Clouds Canvas */
+    #vanta-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+    }
+
+    #app {
+      position: relative;
+      z-index: 10;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Common Classified Panel Styling */
+    .panel {
+      background: rgba(0, 0, 0, 0.68);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.13);
+      position: relative;
+      opacity: 0;
+      animation: rise 0.8s cubic-bezier(0.16,1,0.3,1) 0.2s forwards;
+    }
+
+    .panel::before {
+      content: '';
+      position: absolute;
+      top: -3px; left: -3px;
+      width: 22px; height: 22px;
+      border-top: 1px solid rgba(255,255,255,0.35);
+      border-left: 1px solid rgba(255,255,255,0.35);
+    }
+    .panel::after {
+      content: '';
+      position: absolute;
+      bottom: -3px; right: -3px;
+      width: 22px; height: 22px;
+      border-bottom: 1px solid rgba(255,255,255,0.35);
+      border-right: 1px solid rgba(255,255,255,0.35);
+    }
+
+    /* ── LOGIN / MFA PANELS (lvo-cloud.cloud) ── */
+    #login-view {
+      display: none;
+      width: 380px;
+      padding: 34px 28px 24px;
+    }
+
+    .notice-box {
+      background: rgba(255, 255, 255, 0.03);
+      border-left: 2px solid rgba(239, 68, 68, 0.6);
+      padding: 8px 12px;
+      margin-bottom: 20px;
+      font-size: 0.58rem;
+      letter-spacing: 0.16em;
+      line-height: 1.5;
+      color: rgba(255, 255, 255, 0.45);
+    }
+    .notice-box strong {
+      color: #f87171;
+      display: block;
+      margin-bottom: 2px;
+      letter-spacing: 0.2em;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+      position: relative;
+    }
+    .form-label {
+      display: block;
+      font-size: 0.6rem;
+      letter-spacing: 0.24em;
+      color: rgba(255,255,255,0.35);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+    .form-input {
+      width: 100%;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.14);
+      padding: 11px 14px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 0.8rem;
+      letter-spacing: 0.18em;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-input:focus {
+      border-color: rgba(255,255,255,0.55);
+      background: rgba(255,255,255,0.06);
+    }
+
+    .btn-submit {
+      width: 100%;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.25);
+      color: #fff;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.72rem;
+      letter-spacing: 0.25em;
+      padding: 13px;
+      cursor: pointer;
+      transition: all 0.25s;
+      margin-top: 10px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-submit:hover {
+      background: rgba(255,255,255,0.1);
+      border-color: #fff;
+      letter-spacing: 0.3em;
+    }
+
+    .btn-passkey {
+      width: 100%;
+      background: rgba(56, 189, 248, 0.05);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      color: #38bdf8;
+      font-family: inherit;
+      font-size: 0.68rem;
+      letter-spacing: 0.2em;
+      padding: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 10px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-passkey:hover {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: #38bdf8;
+    }
+
+    .alert-error {
+      display: none;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #fca5a5;
+      font-size: 0.62rem;
+      letter-spacing: 0.15em;
+      padding: 8px 12px;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+
+    /* QR Code Display for MFA Setup */
+    .qr-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      border: 1px solid rgba(255,255,255,0.15);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .qr-image {
+      width: 180px;
+      height: 180px;
+      background: #fff;
+      padding: 8px;
+      display: block;
+    }
+    .secret-key-display {
+      font-size: 0.62rem;
+      letter-spacing: 0.18em;
+      color: #38bdf8;
+      margin-top: 10px;
+      text-align: center;
+      word-break: break-all;
+    }
+    .live-code-badge {
+      font-size: 0.6rem;
+      color: #4ade80;
+      letter-spacing: 0.15em;
+      margin-top: 6px;
+      text-align: center;
+    }
+
+    /* Quick Test Credential Fillers */
+    .quick-creds {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .quick-creds-title {
+      font-size: 0.52rem;
+      letter-spacing: 0.22em;
+      color: rgba(255,255,255,0.25);
+      text-transform: uppercase;
+      text-align: center;
+    }
+    .quick-btn {
+      background: none;
+      border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.4);
+      font-family: inherit;
+      font-size: 0.58rem;
+      letter-spacing: 0.15em;
+      padding: 6px 10px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.2s;
+    }
+    .quick-btn:hover {
+      border-color: rgba(255,255,255,0.3);
+      color: #fff;
+    }
+    .quick-btn strong { color: #fff; }
+
+    /* ── MENU PANEL (online.lvo-cloud.cloud) ── */
+    #menu-view {
+      display: none;
+      width: 320px;
+      padding: 40px 32px 28px;
+    }
+
+    .sigil-wrap {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+
+    .title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 900;
+      letter-spacing: 0.35em;
+      color: rgba(255,255,255,0.85);
+      text-align: center;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      font-size: 0.52rem;
+      color: rgba(255,255,255,0.2);
+      text-align: center;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      margin-bottom: 22px;
+    }
+
+    .rule {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .rule-line {
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(to right, transparent, rgba(255,255,255,0.12));
+    }
+    .rule-line.r { background: linear-gradient(to left, transparent, rgba(255,255,255,0.12)); }
+    .rule-diamond {
+      width: 4px; height: 4px;
+      background: rgba(255,255,255,0.2);
+      transform: rotate(45deg);
+    }
+
+    .nav-menu {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 11px 0;
+      border: none;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      background: none;
+      color: rgba(255,255,255,0.28);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.26em;
+      text-decoration: none;
+      cursor: pointer;
+      transition: color 0.25s, letter-spacing 0.25s;
+      position: relative;
+    }
+    .nav-btn:last-child { border-bottom: none; }
+    .nav-btn:hover { color: rgba(255,255,255,0.85); letter-spacing: 0.3em; }
+
+    .nav-btn .glyph {
+      font-size: 0.55rem;
+      color: rgba(255,255,255,0.15);
+      transition: color 0.25s;
+      flex-shrink: 0;
+      width: 10px;
+    }
+    .nav-btn:hover .glyph { color: rgba(255,255,255,0.6); }
+
+    .nav-btn .arr {
+      margin-left: auto;
+      font-size: 0.65rem;
+      opacity: 0;
+      transform: translateX(-4px);
+      transition: opacity 0.25s, transform 0.25s;
+      color: rgba(255,255,255,0.3);
+    }
+    .nav-btn:hover .arr { opacity: 1; transform: translateX(0); }
+
+    .nav-btn-admin {
+      color: #f87171 !important;
+      border-top: 1px solid rgba(239, 68, 68, 0.2);
+      margin-top: 6px;
+      padding-top: 12px;
+    }
+    .nav-btn-admin:hover {
+      color: #fca5a5 !important;
+    }
+
+    .footer {
+      font-size: 0.46rem;
+      color: rgba(255,255,255,0.1);
+      text-align: center;
+      letter-spacing: 0.18em;
+      margin-top: 24px;
+    }
+
+    .operator-header {
+      position: fixed;
+      top: 20px;
+      right: 28px;
+      z-index: 30;
+      display: none;
+      align-items: center;
+      gap: 14px;
+      font-size: 0.62rem;
+      letter-spacing: 0.2em;
+    }
+    .op-tag {
+      color: rgba(255,255,255,0.5);
+    }
+    .op-logout-btn {
+      background: none;
+      border: 1px solid rgba(255,255,255,0.15);
+      color: rgba(255,255,255,0.4);
+      font-family: inherit;
+      font-size: 0.58rem;
+      padding: 4px 8px;
+      cursor: pointer;
+      letter-spacing: 0.15em;
+      transition: all 0.2s;
+    }
+    .op-logout-btn:hover {
+      border-color: #f87171;
+      color: #f87171;
+    }
+
+    .sound-btn {
+      position: fixed;
+      bottom: 24px;
+      right: 28px;
+      z-index: 20;
+      background: none;
+      border: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255,255,255,0.2);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.62rem;
+      letter-spacing: 0.2em;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: all 0.25s;
+    }
+    .sound-btn:hover {
+      border-color: rgba(255,255,255,0.35);
+      color: rgba(255,255,255,0.7);
+    }
+
+    .inactivity-status {
+      position: fixed;
+      bottom: 24px;
+      left: 28px;
+      z-index: 20;
+      font-size: 0.58rem;
+      letter-spacing: 0.18em;
+      color: rgba(255,255,255,0.2);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vanta@0.5.24/dist/vanta.clouds.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vanta@0.5.24/dist/vanta.clouds2.min.js"></script>
+</head>
+<body>
+
+  <!-- Cloud Background Container -->
+  <div id="vanta-bg"></div>
+
+  <!-- Operator Header (When Logged In) -->
+  <div class="operator-header" id="operator-header">
+    <div class="op-tag" id="operator-identity">OPERATOR: ...</div>
+    <button class="op-logout-btn" onclick="executeLogout()">TERMINATE SESSION [LOGOUT]</button>
+  </div>
+
+  <div id="app">
+
+    <!-- ── 1. LOGIN & 2-STEP MFA VIEW (lvo-cloud.cloud) ── -->
+    <div class="panel" id="login-view">
+      <div class="sigil-wrap">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="20" cy="20" r="19" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+          <circle cx="20" cy="20" r="13" stroke="rgba(255,255,255,0.08)" stroke-width="1" stroke-dasharray="2 3"/>
+          <polygon points="20,4 34,28 6,28" stroke="rgba(255,255,255,0.22)" stroke-width="1" fill="none"/>
+          <polygon points="20,36 6,12 34,12" stroke="rgba(255,255,255,0.12)" stroke-width="1" fill="none"/>
+          <circle cx="20" cy="20" r="2.5" fill="rgba(255,255,255,0.45)"/>
+        </svg>
+      </div>
+
+      <div class="title" style="font-size:1.25rem;">LVO-CLOUD</div>
+      <div class="subtitle" id="login-subtitle">SECURE CLOUD ACCESS // CLASSIFIED</div>
+
+      <div class="notice-box" id="login-notice">
+        <strong>// INVITE-ONLY ACCESS</strong>
+        Public registration is permanently disabled. Operator accounts are provisioned exclusively by Master Administrator.
+      </div>
+
+      <div class="alert-error" id="login-error-msg"></div>
+
+      <!-- Phase 1: Username & Password -->
+      <form id="form-step1" onsubmit="handleLoginStep1(event)">
+        <div class="form-group">
+          <label class="form-label">OPERATOR IDENTIFIER</label>
+          <input type="text" id="input-username" class="form-input" placeholder="e.g. admin" required autocomplete="username" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">SECURITY PASSPHRASE</label>
+          <input type="password" id="input-password" class="form-input" placeholder="••••••••••••" required autocomplete="current-password" />
+        </div>
+        <button type="submit" class="btn-submit">
+          SIGN IN &rarr;
+        </button>
+      </form>
+
+      <!-- Phase 2A: Mandatory MFA Setup (First-time sign-in) -->
+      <div id="form-mfa-setup" style="display:none;">
+        <div style="font-size:0.62rem; color:rgba(255,255,255,0.6); letter-spacing:0.18em; margin-bottom:12px; line-height:1.5; text-align:center;">
+          MANDATORY 2-STEP MFA SETUP<br/>
+          <span style="color:rgba(255,255,255,0.35); font-size:0.55rem;">Scan this QR code with your Authenticator app (Google Authenticator, Apple Passwords, Authy):</span>
+        </div>
+
+        <div class="qr-container">
+          <img id="mfa-qr-img" class="qr-image" src="" alt="MFA QR Code" />
+          <div class="secret-key-display" id="mfa-secret-display"></div>
+          <div class="live-code-badge" id="mfa-dev-code-display"></div>
+        </div>
+
+        <form onsubmit="handleMfaConfirmSetup(event)">
+          <div class="form-group">
+            <label class="form-label">ENTER 6-DIGIT MFA CODE FROM AUTHENTICATOR</label>
+            <input type="text" id="input-mfa-setup-code" class="form-input" placeholder="000000" maxlength="6" required autocomplete="one-time-code" />
+          </div>
+          <button type="submit" class="btn-submit">
+            CONFIRM MFA & ENTER ONLINE &rarr;
+          </button>
+        </form>
+        <div style="text-align:center; margin-top:10px;">
+          <a href="#" onclick="backToLoginStep1(event)" style="color:rgba(255,255,255,0.3); font-size:0.58rem; letter-spacing:0.2em; text-decoration:none;">&larr; CANCEL</a>
+        </div>
+      </div>
+
+      <!-- Phase 2B: Returning User 6-digit MFA / Passkey Verification -->
+      <div id="form-mfa-verify" style="display:none;">
+        <div style="font-size:0.65rem; color:rgba(255,255,255,0.6); letter-spacing:0.18em; margin-bottom:14px; text-align:center;">
+          TWO-STEP VERIFICATION // <span id="verify-user-label" style="color:#fff;"></span>
+        </div>
+        <div class="live-code-badge" id="mfa-verify-dev-code" style="margin-bottom:12px;"></div>
+
+        <form onsubmit="handleMfaVerify(event)">
+          <div class="form-group">
+            <label class="form-label">ENTER 6-DIGIT AUTHENTICATOR CODE</label>
+            <input type="text" id="input-mfa-verify-code" class="form-input" placeholder="000000" maxlength="6" autocomplete="one-time-code" />
+          </div>
+          <button type="submit" class="btn-submit">
+            VERIFY & ENTER ONLINE &rarr;
+          </button>
+          <button type="button" class="btn-passkey" onclick="handlePasskeyVerify()">
+            <span>⚿</span> AUTHENTICATE VIA HARDWARE PASSKEY
+          </button>
+        </form>
+        <div style="text-align:center; margin-top:12px;">
+          <a href="#" onclick="backToLoginStep1(event)" style="color:rgba(255,255,255,0.3); font-size:0.58rem; letter-spacing:0.2em; text-decoration:none;">&larr; BACK TO CREDENTIALS</a>
+        </div>
+      </div>
+
+      <!-- Quick Test Credential Fillers -->
+      <div class="quick-creds" id="quick-creds-box">
+        <div class="quick-creds-title">DEVELOPMENT ACCESS KEYS</div>
+        <button class="quick-btn" onclick="fillCreds('admin', 'classified2026')">
+          [MASTER ADMIN] <strong>admin</strong> // classified2026
+        </button>
+        <button class="quick-btn" onclick="fillCreds('operator-01', 'cipher-alpha')">
+          [OPERATOR 01] <strong>operator-01</strong> // cipher-alpha
+        </button>
+      </div>
+
+      <div class="footer">LVO HOLDINGS &bull; ACCESS STRICTLY RESTRICTED</div>
+    </div>
+
+    <!-- ── 2. MENU VIEW (online.lvo-cloud.cloud) ── -->
+    <div class="panel" id="menu-view">
+      <div class="sigil-wrap">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="20" cy="20" r="19" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
+          <circle cx="20" cy="20" r="13" stroke="rgba(255,255,255,0.08)" stroke-width="1" stroke-dasharray="2 3"/>
+          <polygon points="20,4 34,28 6,28" stroke="rgba(255,255,255,0.22)" stroke-width="1" fill="none"/>
+          <polygon points="20,36 6,12 34,12" stroke="rgba(255,255,255,0.12)" stroke-width="1" fill="none"/>
+          <circle cx="20" cy="20" r="2.5" fill="rgba(255,255,255,0.45)"/>
+        </svg>
+      </div>
+
+      <div class="title">LVO</div>
+      <div class="subtitle">Classified Access &mdash; Terminal Portal</div>
+
+      <div class="rule">
+        <div class="rule-line"></div>
+        <div class="rule-diamond"></div>
+        <div class="rule-line r"></div>
+      </div>
+
+      <nav class="nav-menu">
+        <a class="nav-btn" href="/dashboard/">
+          <span class="glyph">&#9670;</span>
+          <span>DASHBOARD</span>
+          <span class="arr">&rarr;</span>
+        </a>
+        <a class="nav-btn" href="/chat/">
+          <span class="glyph">&#9670;</span>
+          <span>CHAT</span>
+          <span class="arr">&rarr;</span>
+        </a>
+        <a class="nav-btn" href="/status/">
+          <span class="glyph">&#9670;</span>
+          <span>STATUS</span>
+          <span class="arr">&rarr;</span>
+        </a>
+        <a class="nav-btn" href="/docs/">
+          <span class="glyph">&#9670;</span>
+          <span>DOCS</span>
+          <span class="arr">&rarr;</span>
+        </a>
+        <a class="nav-btn" href="/support/">
+          <span class="glyph">&#9670;</span>
+          <span>SUPPORT</span>
+          <span class="arr">&rarr;</span>
+        </a>
+
+        <!-- Admin Only Option -->
+        <a class="nav-btn nav-btn-admin" id="admin-nav-item" href="/admin/" style="display:none;">
+          <span class="glyph" style="color:#f87171;">&#9670;</span>
+          <span>ADMIN CONTROL MATRIX</span>
+          <span class="arr" style="color:#f87171;">&rarr;</span>
+        </a>
+      </nav>
+
+      <div class="footer">LVO HOLDINGS &bull; ACCESS STRICTLY RESTRICTED</div>
+    </div>
+
+  </div>
+
+  <!-- Inactivity Timer Status Indicator -->
+  <div class="inactivity-status">
+    <span>SESSION: AUTO-LOCK 5M</span>
+    <span id="timeout-clock" style="color: rgba(255,255,255,0.35);">[05:00]</span>
+  </div>
+
+  <button class="sound-btn" id="sound-btn">SOUND ON</button>
+
+  <audio id="ambient" loop preload="auto">
+    <source src="assets/Project18.mp3" type="audio/mpeg"/>
+  </audio>
+
+  <script>
+    let currentUser = null;
+    let vantaEffect = null;
+    let pendingUserId = null;
+    let pendingSecret = null;
+
+    // ── 1. VANTA CLOUDS CONTROLLER ──
+    // Login site uses 3D Clouds; Menu site uses horizontal clouds (Clouds2)
+    function setCloudEffect(mode) {
+      if (vantaEffect) {
+        vantaEffect.destroy();
+        vantaEffect = null;
+      }
+
+      if (mode === 'menu') {
+        // Horizontal clouds for the online menu
+        if (window.VANTA && window.VANTA.CLOUDS2) {
+          vantaEffect = VANTA.CLOUDS2({
+            el: '#vanta-bg',
+            mouseControls: true,
+            touchControls: false,
+            gyroControls: false,
+            minHeight: 200.00,
+            minWidth: 200.00,
+            scale: 1.00,
+            texturePath: "assets/noise.png",
+            skyColor: 0x000000,
+            cloudColor: 0x222228,
+            cloudShadowColor: 0x050507,
+            sunColor: 0x333340,
+            sunGlareColor: 0x111116,
+            sunLightColor: 0x22222a,
+            speed: 0.6
+          });
+        }
+      } else {
+        // 3D Clouds for lvo-cloud.cloud login
+        if (window.VANTA && window.VANTA.CLOUDS) {
+          vantaEffect = VANTA.CLOUDS({
+            el: '#vanta-bg',
+            mouseControls: true,
+            touchControls: false,
+            gyroControls: false,
+            minHeight: 200.00,
+            minWidth: 200.00,
+            skyColor: 0x020204,
+            cloudColor: 0x181a24,
+            cloudShadowColor: 0x06070a,
+            sunColor: 0x2b2e3d,
+            sunGlareColor: 0x12141c,
+            sunLightColor: 0x1f212d,
+            speed: 0.8
+          });
+        }
+      }
+    }
+
+    // ── 2. AUTHENTICATION & SESSION MANAGEMENT ──
+    function getStoredToken() {
+      return localStorage.getItem('lvo_token') || getCookie('lvo_token');
+    }
+
+    function getCookie(name) {
+      var match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+      return match ? decodeURIComponent(match[1]) : null;
+    }
+
+    async function verifySession() {
+      try {
+        const token = getStoredToken();
+        const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+        const res = await fetch('/api/auth/me', { headers });
+        const data = await res.json();
+        if (data.authenticated && data.user) {
+          currentUser = data.user;
+          showMenuView();
+        } else {
+          localStorage.removeItem('lvo_token');
+          localStorage.removeItem('lvo_user');
+          showLoginView();
+        }
+      } catch (err) {
+        showLoginView();
+      }
+    }
+
+    function showLoginView() {
+      document.getElementById('login-view').style.display = 'block';
+      document.getElementById('menu-view').style.display = 'none';
+      document.getElementById('operator-header').style.display = 'none';
+      backToLoginStep1();
+      setCloudEffect('login');
+    }
+
+    function showMenuView() {
+      document.getElementById('login-view').style.display = 'none';
+      document.getElementById('menu-view').style.display = 'block';
+      document.getElementById('operator-header').style.display = 'flex';
+
+      const opText = `OPERATOR: ${currentUser.username.toUpperCase()} // ${currentUser.clearance} (${currentUser.role.toUpperCase()})`;
+      document.getElementById('operator-identity').textContent = opText;
+
+      // Show Admin Matrix button if user role is admin
+      if (currentUser.role === 'admin') {
+        document.getElementById('admin-nav-item').style.display = 'flex';
+      } else {
+        document.getElementById('admin-nav-item').style.display = 'none';
+      }
+
+      setCloudEffect('menu');
+    }
+
+    function fillCreds(u, p) {
+      document.getElementById('input-username').value = u;
+      document.getElementById('input-password').value = p;
+      hideError();
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('login-error-msg');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+    function hideError() {
+      document.getElementById('login-error-msg').style.display = 'none';
+    }
+
+    function backToLoginStep1(e) {
+      if (e) e.preventDefault();
+      hideError();
+      document.getElementById('form-step1').style.display = 'block';
+      document.getElementById('form-mfa-setup').style.display = 'none';
+      document.getElementById('form-mfa-verify').style.display = 'none';
+      document.getElementById('quick-creds-box').style.display = 'flex';
+      document.getElementById('login-subtitle').textContent = 'SECURE CLOUD ACCESS // CLASSIFIED';
+    }
+
+    // Step 1: Submit Username & Password
+    async function handleLoginStep1(e) {
+      e.preventDefault();
+      hideError();
+      const username = document.getElementById('input-username').value.trim();
+      const password = document.getElementById('input-password').value.trim();
+      if (!username || !password) return;
+
+      try {
+        const res = await fetch('/api/auth/login-step1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showError(data.error || 'INVALID CREDENTIALS');
+          return;
+        }
+
+        pendingUserId = data.userId;
+
+        // Hide Step 1 and quick creds
+        document.getElementById('form-step1').style.display = 'none';
+        document.getElementById('quick-creds-box').style.display = 'none';
+
+        if (data.status === 'MFA_SETUP_REQUIRED') {
+          // USER MUST SETUP 2-STEP MFA! Cannot get past without scanning QR & entering code
+          pendingSecret = data.secret;
+          document.getElementById('mfa-qr-img').src = data.qrCode;
+          document.getElementById('mfa-secret-display').textContent = 'SECRET KEY: ' + data.secret;
+          if (data.devCode) {
+            document.getElementById('mfa-dev-code-display').textContent = 'CURRENT CODE HELPER: ' + data.devCode;
+          }
+          document.getElementById('login-subtitle').textContent = '2-STEP MFA SETUP REQUIRED';
+          document.getElementById('form-mfa-setup').style.display = 'block';
+          document.getElementById('input-mfa-setup-code').value = '';
+          document.getElementById('input-mfa-setup-code').focus();
+        } else if (data.status === 'MFA_VERIFY_REQUIRED') {
+          // Returning user: Enter 6-digit MFA
+          document.getElementById('verify-user-label').textContent = data.username.toUpperCase();
+          if (data.devCode) {
+            document.getElementById('mfa-verify-dev-code').textContent = 'CURRENT CODE HELPER: ' + data.devCode;
+          } else {
+            document.getElementById('mfa-verify-dev-code').textContent = '';
+          }
+          document.getElementById('login-subtitle').textContent = '2-STEP MFA VERIFICATION';
+          document.getElementById('form-mfa-verify').style.display = 'block';
+          document.getElementById('input-mfa-verify-code').value = '';
+          document.getElementById('input-mfa-verify-code').focus();
+        }
+      } catch (err) {
+        showError('COMMUNICATION GATEWAY ERROR');
+      }
+    }
+
+    // Step 2A: Confirm MFA Setup
+    async function handleMfaConfirmSetup(e) {
+      e.preventDefault();
+      hideError();
+      const code = document.getElementById('input-mfa-setup-code').value.trim();
+      if (!code) {
+        showError('PLEASE ENTER THE 6-DIGIT MFA CODE.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/mfa-confirm-setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: pendingUserId, code })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showError(data.error || 'INVALID 6-DIGIT MFA CODE');
+          return;
+        }
+
+        // Successfully set up MFA & logged in!
+        currentUser = data.user;
+        if (data.token) {
+          const expiry = Date.now() + 86400000;
+          localStorage.setItem('lvo_token', data.token);
+          localStorage.setItem('lvo_expiry', String(expiry));
+          localStorage.setItem('lvo_user', JSON.stringify(data.user));
+          localStorage.setItem('lvo_session', JSON.stringify({
+            token: data.token,
+            user: {
+              id: data.user.id,
+              username: data.user.username,
+              displayName: data.user.username,
+              role: data.user.role,
+              avatar: 'assets/avatar-1.jpg'
+            }
+          }));
+          document.cookie = 'lvo_token=' + data.token + '; path=/; max-age=86400; SameSite=Lax';
+          document.cookie = 'lvo_expiry=' + expiry + '; path=/; max-age=86400; SameSite=Lax';
+        }
+        showMenuView();
+      } catch (err) {
+        showError('ERROR CONFIRMING MFA SETUP');
+      }
+    }
+
+    // Step 2B: Verify Returning MFA
+    async function handleMfaVerify(e) {
+      e.preventDefault();
+      hideError();
+      const code = document.getElementById('input-mfa-verify-code').value.trim();
+      if (!code) {
+        showError('PLEASE ENTER YOUR 6-DIGIT CODE.');
+        return;
+      }
+      await completeVerification({ userId: pendingUserId, code });
+    }
+
+    async function handlePasskeyVerify() {
+      hideError();
+      await completeVerification({ userId: pendingUserId, passkey: true });
+    }
+
+    async function completeVerification(payload) {
+      try {
+        const res = await fetch('/api/auth/mfa-verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showError(data.error || 'INVALID MFA VERIFICATION');
+          return;
+        }
+
+        currentUser = data.user;
+        if (data.token) {
+          const expiry = Date.now() + 86400000;
+          localStorage.setItem('lvo_token', data.token);
+          localStorage.setItem('lvo_expiry', String(expiry));
+          localStorage.setItem('lvo_user', JSON.stringify(data.user));
+          localStorage.setItem('lvo_session', JSON.stringify({
+            token: data.token,
+            user: {
+              id: data.user.id,
+              username: data.user.username,
+              displayName: data.user.username,
+              role: data.user.role,
+              avatar: 'assets/avatar-1.jpg'
+            }
+          }));
+          document.cookie = 'lvo_token=' + data.token + '; path=/; max-age=86400; SameSite=Lax';
+          document.cookie = 'lvo_expiry=' + expiry + '; path=/; max-age=86400; SameSite=Lax';
+        }
+        showMenuView();
+      } catch (err) {
+        showError('ERROR VERIFYING MFA');
+      }
+    }
+
+    async function executeLogout() {
+      try {
+        const token = getStoredToken();
+        await fetch('/api/auth/logout', { 
+          method: 'POST',
+          headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+        });
+      } catch (e) {}
+      localStorage.removeItem('lvo_token');
+      localStorage.removeItem('lvo_expiry');
+      localStorage.removeItem('lvo_user');
+      localStorage.removeItem('lvo_session');
+      document.cookie = 'lvo_token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 UTC';
+      document.cookie = 'lvo_expiry=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 UTC';
+      document.cookie = 'lvo_token=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 UTC';
+      currentUser = null;
+      showLoginView();
+    }
+
+    // ── 3. AUDIO TOGGLE ──
+    const audio = document.getElementById('ambient');
+    const soundBtn = document.getElementById('sound-btn');
+    let playing = false;
+
+    soundBtn.addEventListener('click', function() {
+      if (!playing) {
+        audio.volume = 0.5;
+        audio.play().then(function() {
+          playing = true;
+          soundBtn.textContent = 'SOUND OFF';
+          soundBtn.style.borderColor = 'rgba(255,255,255,0.4)';
+          soundBtn.style.color = 'rgba(255,255,255,0.85)';
+        }).catch(function() {});
+      } else {
+        audio.pause();
+        playing = false;
+        soundBtn.textContent = 'SOUND ON';
+        soundBtn.style.borderColor = 'rgba(255,255,255,0.1)';
+        soundBtn.style.color = 'rgba(255,255,255,0.2)';
+      }
+    });
+
+    // ── 4. GLOBAL 5-MINUTE INACTIVITY AUTO-LOGOUT ──
+    (function() {
+      const INACTIVITY_TIMEOUT = 5 * 60 * 1000;
+      let lastActivity = Date.now();
+      const clockEl = document.getElementById('timeout-clock');
+
+      function recordActivity() {
+        lastActivity = Date.now();
+      }
+
+      ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'].forEach(evt => {
+        window.addEventListener(evt, recordActivity, { passive: true });
+      });
+
+      setInterval(function() {
+        const elapsed = Date.now() - lastActivity;
+        const remaining = Math.max(0, INACTIVITY_TIMEOUT - elapsed);
+        const mm = Math.floor(remaining / 60000);
+        const ss = Math.floor((remaining % 60000) / 1000);
+        if (clockEl) {
+          clockEl.textContent = '[' + (mm < 10 ? '0' : '') + mm + ':' + (ss < 10 ? '0' : '') + ss + ']';
+        }
+        if (remaining <= 0 && currentUser) {
+          executeLogout();
+        }
+      }, 1000);
+    })();
+
+    // Initial check
+    verifySession();
+  </script>
+
+</body>
+</html>

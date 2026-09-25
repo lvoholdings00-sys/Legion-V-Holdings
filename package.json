@@ -1,0 +1,17 @@
+{
+  "name": "lvo-online",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "build": "echo 'No build required'"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "express": "^4.21.2",
+    "otplib": "^13.5.0",
+    "qrcode": "^1.5.4"
+  }
+}

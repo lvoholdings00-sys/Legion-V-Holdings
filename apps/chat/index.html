@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>𝐋𝐕𝐎 — chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css?v=20260908c" />
+<link rel="icon" type="image/png" href="assets/logo.png"/>
+<link rel="apple-touch-icon" href="assets/logo.png"/>
+
+<!--
+  TEAMS-STYLE ADDITIONS (new).
+  This block is self-contained so it works even before app.css picks up
+  matching rules — it only defines classes that didn't exist before
+  (top-tabs, search, calendar, news). It reuses your existing CSS
+  variables (--panel-raised, etc.) where they're already relied on
+  elsewhere in the app, and falls back sanely if they're undefined.
+-->
+<style>
+  :root{
+    --teams-accent: var(--accent, #5b5fc7);
+    --teams-accent-hover: var(--accent-hover, #4649a8);
+    --teams-border: var(--border, rgba(127,127,127,.18));
+    --teams-surface: var(--panel-raised, #1e1f26);
+  }
+
+  /* ---- top tab row (Chat / Calendar / News), Teams left-rail style ---- */
+  .top-tabs{
+    display:flex;
+    gap:4px;
+    padding:8px 10px 4px;
+    border-bottom:1px solid var(--teams-border);
+  }
+  .top-tab{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:2px;
+    padding:7px 4px;
+    border:none;
+    background:transparent;
+    border-radius:8px;
+    cursor:pointer;
+    font-family:inherit;
+    font-size:11px;
+    color:inherit;
+    opacity:.65;
+  }
+  .top-tab .top-tab-icon{ font-size:16px; line-height:1; }
+  .top-tab:hover{ opacity:.9; background:rgba(127,127,127,.08); }
+  .top-tab.active{ opacity:1; background:rgba(91,95,199,.14); color:var(--teams-accent); box-shadow:inset 0 0 0 1px rgba(91,95,199,.35); }
+
+  /* ---- global search (Teams "Search or type a command") ---- */
+  .global-search{ position:relative; padding:8px 10px; }
+  .global-search input{
+    width:100%;
+    box-sizing:border-box;
+    padding:8px 10px 8px 30px;
+    border-radius:6px;
+    border:1px solid var(--teams-border);
+    background:rgba(127,127,127,.08);
+    color:inherit;
+    font-family:inherit;
+    font-size:13px;
+  }
+  .global-search::before{
+    content:"🔍";
+    position:absolute;
+    left:19px; top:17px;
+    font-size:12px;
+    opacity:.6;
+    pointer-events:none;
+  }
+  .search-results{
+    position:absolute;
+    left:10px; right:10px; top:100%;
+    z-index:40;
+    background:var(--teams-surface);
+    border:1px solid var(--teams-border);
+    border-radius:8px;
+    box-shadow:0 8px 24px rgba(0,0,0,.35);
+    max-height:70vh;
+    overflow-y:auto;
+    padding:6px 0;
+  }
+  .search-results.hidden{ display:none; }
+  .search-section-label{
+    font-size:10.5px; letter-spacing:.06em; text-transform:uppercase;
+    opacity:.55; padding:8px 12px 4px;
+  }
+  .search-result-row{
+    display:flex; align-items:center; gap:8px;
+    width:100%; text-align:left;
+    padding:7px 12px;
+    border:none; background:transparent; color:inherit;
+    font-family:inherit; font-size:13px; cursor:pointer;
+  }
+  .search-result-row:hover{ background:rgba(127,127,127,.1); }
+  .search-result-sub{ opacity:.6; font-size:11.5px; margin-left:auto; padding-left:8px; white-space:nowrap; }
+  .search-empty{ padding:10px 12px; opacity:.6; font-size:12.5px; }
+
+  /* ---- shared full-pane view (Calendar / News sit where chat sits) ---- */
+  .full-view{ padding:22px 26px; overflow-y:auto; height:100%; box-sizing:border-box; }
+  .full-view-header{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:16px; gap:12px; flex-wrap:wrap;
+  }
+  .full-view-header h1{ font-family:'Fraunces', serif; font-size:22px; margin:0; }
+
+  /* ---- calendar ---- */
+  .cal-nav{ display:flex; align-items:center; gap:10px; }
+  .cal-nav button{ background:transparent; border:1px solid var(--teams-border); border-radius:6px; color:inherit; cursor:pointer; padding:4px 9px; }
+  .cal-month-label{ font-weight:600; min-width:150px; text-align:center; }
+  .calendar-grid{
+    display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin-bottom:20px;
+  }
+  .calendar-dow{ text-align:center; font-size:11px; opacity:.55; padding-bottom:4px; text-transform:uppercase; letter-spacing:.05em; }
+  .calendar-day{
+    min-height:78px; border:1px solid var(--teams-border); border-radius:8px;
+    padding:6px; font-size:12px; cursor:pointer; position:relative;
+    display:flex; flex-direction:column; gap:3px;
+  }
+  .calendar-day.other-month{ opacity:.35; }
+  .calendar-day.today{ box-shadow:inset 0 0 0 2px var(--teams-accent); }
+  .calendar-day.selected{ background:rgba(91,95,199,.14); }
+  .calendar-day .day-num{ font-weight:600; }
+  .calendar-day .day-dot-row{ display:flex; gap:3px; flex-wrap:wrap; }
+  .calendar-day .day-dot{ width:6px; height:6px; border-radius:50%; background:var(--teams-accent); }
+  .day-events-panel{ border-top:1px solid var(--teams-border); padding-top:14px; }
+  .event-item{
+    display:flex; gap:10px; align-items:flex-start;
+    padding:10px 12px; border:1px solid var(--teams-border); border-radius:8px; margin-bottom:8px;
+  }
+  .event-time{ font-family:'IBM Plex Mono', monospace; font-size:12px; opacity:.7; min-width:56px; }
+  .event-body{ flex:1; }
+  .event-title{ font-weight:600; margin-bottom:2px; }
+  .event-desc{ opacity:.75; font-size:12.5px; }
+  .event-remove{ background:none; border:none; color:inherit; opacity:.5; cursor:pointer; }
+  .event-remove:hover{ opacity:1; }
+
+  /* ---- news / announcements feed ---- */
+  .news-compose{ border:1px solid var(--teams-border); border-radius:10px; padding:14px; margin-bottom:20px; }
+  .news-compose input, .news-compose textarea{
+    width:100%; box-sizing:border-box; padding:9px 10px; border-radius:6px;
+    border:1px solid var(--teams-border); background:rgba(127,127,127,.06);
+    color:inherit; font-family:inherit; font-size:13.5px; margin-bottom:8px;
+  }
+  .news-compose textarea{ min-height:70px; resize:vertical; }
+  .news-post{ border:1px solid var(--teams-border); border-radius:10px; padding:16px; margin-bottom:14px; }
+  .news-post.pinned{ box-shadow:inset 0 0 0 1px var(--teams-accent); }
+  .news-post-head{ display:flex; align-items:baseline; gap:8px; margin-bottom:6px; }
+  .news-post-title{ font-weight:700; font-size:15px; }
+  .news-post-meta{ opacity:.55; font-size:11.5px; margin-left:auto; }
+  .news-post-body{ white-space:pre-wrap; font-size:13.5px; line-height:1.5; }
+  .news-pin-tag{ font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--teams-accent); border:1px solid var(--teams-accent); border-radius:4px; padding:1px 5px; }
+
+  /* ---- mobile: calendar/news share the chat-back-btn's existing
+     show/hide-on-mobile rule (it's already wired to your breakpoint),
+     so #calendar-back-btn/#news-back-btn need no extra media query.
+     The grid itself still needs to shrink so 7 columns fit a phone
+     screen. ---- */
+  @media (max-width: 560px){
+    .full-view{ padding:14px 12px; }
+    .full-view-header{ gap:8px; }
+    .full-view-header h1{ font-size:18px; }
+    .cal-nav{ gap:6px; flex-wrap:wrap; }
+    .cal-month-label{ min-width:auto; font-size:13px; }
+    .calendar-grid{ gap:3px; }
+    .calendar-day{ min-height:44px; padding:3px; font-size:10px; border-radius:5px; }
+    .calendar-day .day-dot{ width:4px; height:4px; }
+    .news-post{ padding:12px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ---------------- Login ---------------- -->
+<section id="login-screen" style="display:none !important;">
+  <a class="back-to-site login-back" href="https://online.lvo-cloud.cloud">← Back to lvo-cloud.cloud</a>
+  <form class="login-card" id="login-form">
+    <p class="wordmark">𝐋𝐕𝐎</p>
+    <p class="tagline">Secure line. Members only — Accounts are created by the 𝐋𝐕𝐎 Gatekeepers.</p>
+
+    <div class="field">
+      <label for="login-username">Username</label>
+      <input id="login-username" type="text" autocomplete="username" required />
+    </div>
+    <div class="field">
+      <label for="login-password">Password</label>
+      <input id="login-password" type="password" autocomplete="current-password" required />
+    </div>
+    <button class="btn" type="submit" id="login-submit">Sign in</button>
+    <p class="error-text" id="login-error"></p>
+  </form>
+</section>
+
+<!-- ---------------- Force password change (first login) ---------------- -->
+<div class="modal-backdrop hidden" id="pwd-modal">
+  <div class="modal">
+    <h2>Set a new password</h2>
+    <p class="subhead">Your admin created this account with a temporary password. Choose your own before continuing.</p>
+    <div class="field">
+      <label for="pwd-new">New password (8+ characters)</label>
+      <input id="pwd-new" type="password" autocomplete="new-password" />
+    </div>
+    <p class="error-text" id="pwd-error"></p>
+    <div class="modal-actions">
+      <button class="btn" id="pwd-save">Save and continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---------------- App ---------------- -->
+<section id="app-screen">
+  <aside class="rail" id="rail">
+    <div class="rail-header">
+      <a href="/" style="text-decoration:none;color:inherit;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.08em;opacity:0.75;display:inline-flex;align-items:center;gap:5px;margin-bottom:10px;padding:4px 8px;border:1px solid rgba(127,127,127,0.25);border-radius:4px;">← MENU</a><p class="rail-brand">𝐋𝐕𝐎</p>
+      <a class="back-to-site" href="https://online.lvo-cloud.cloud">← lvo-cloud.cloud</a>
+      <div class="me-row">
+        <div class="avatar avatar-sm" id="me-avatar"></div>
+        <span class="me-name" id="me-name"></span>
+        <span class="leader-badge hidden" id="leader-badge">LEADER</span>
+        <button class="icon-btn" id="open-avatar-modal" title="Change your image">✎</button>
+      </div>
+    </div>
+
+    <!-- NEW: Teams-style top tabs -->
+    <nav class="top-tabs" id="top-tabs">
+      <button class="top-tab active" data-tab="chat" type="button">
+        <span class="top-tab-icon">💬</span><span>Chat</span>
+      </button>
+      <button class="top-tab" data-tab="calendar" type="button">
+        <span class="top-tab-icon">📅</span><span>Calendar</span>
+      </button>
+      <button class="top-tab" data-tab="news" type="button">
+        <span class="top-tab-icon">📰</span><span>News</span>
+      </button>
+    </nav>
+
+    <!-- NEW: global search (Teams "Search or type a command") -->
+    <div class="global-search">
+      <input id="global-search-input" type="text" placeholder="Search people, channels, messages…" autocomplete="off" />
+      <div class="search-results hidden" id="search-results"></div>
+    </div>
+
+    <div id="chat-rail-lists">
+      <p class="roster-label" id="channels-label">CHANNELS</p>
+      <div class="roster-list channels-list" id="channels-list">
+        <p class="roster-empty">Loading…</p>
+      </div>
+
+      <p class="roster-label">RECENT CHATS</p>
+      <div class="roster-list" id="roster-list">
+        <p class="roster-empty">Loading…</p>
+      </div>
+    </div>
+
+    <div class="rail-footer">
+      <button class="icon-btn settings-btn" id="settings-btn" title="Settings">⚙</button>
+      <div class="settings-popover hidden" id="settings-popover">
+        <button class="settings-item" id="settings-avatar-btn">Change profile picture</button>
+        <button class="settings-item hidden" id="admin-link">Admin panel</button>
+        <div class="settings-divider"></div>
+        <button class="settings-item danger" id="logout-btn">Log out</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="chat-pane" id="chat-pane">
+    <div id="chat-empty" class="chat-empty">Pick a channel or a member from the left to start a conversation.</div>
+
+    <div id="chat-active" class="hidden" style="display:contents;">
+      <div class="chat-header">
+        <button class="icon-btn chat-back-btn" id="chat-back-btn" title="Back">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="avatar avatar-lg" id="peer-avatar"></div>
+        <div>
+          <div class="chat-peer-name" id="peer-name"></div>
+          <div class="chat-status"><span class="status-dot" id="status-dot"></span><span id="status-text">Connecting…</span></div>
+        </div>
+        <button class="icon-btn" id="mute-btn" style="margin-left:auto;" title="Mute notifications">🔔</button>
+      </div>
+      <div class="messages" id="messages"></div>
+
+      <div class="attachment-preview hidden" id="attachment-preview"></div>
+
+      <p class="error-text" id="composer-error"></p>
+      <div class="composer" id="composer-row">
+        <input
+          type="file"
+          id="composer-file-input"
+          class="hidden"
+          accept=".pdf,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic,.mp3,.wav,.m4a,.aac,.ogg,.flac,.mp4,.mov,.webm,.avi,.mkv"
+          multiple
+        />
+        <div class="composer-pill">
+          <button class="icon-btn" type="button" id="composer-attach-btn" title="Attach a file">📎</button>
+          <button class="icon-btn" type="button" id="composer-gif-btn" title="Send a GIF">GIF</button>
+          <textarea id="composer-input" placeholder="Message…"></textarea>
+        </div>
+        <button class="composer-send-btn" id="composer-send" title="Send">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 20l18-8L3 4v6l12 2-12 2z"/></svg>
+        </button>
+      </div>
+      <div class="composer-locked hidden" id="composer-locked">Only admins can post in this channel.</div>
+    </div>
+
+    <!-- NEW: Calendar view -->
+    <div id="calendar-view" class="full-view hidden">
+      <div class="full-view-header">
+        <button class="icon-btn chat-back-btn" id="calendar-back-btn" title="Back">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <h1>Calendar</h1>
+        <div class="cal-nav">
+          <button id="cal-prev" type="button">←</button>
+          <span class="cal-month-label" id="cal-month-label"></span>
+          <button id="cal-next" type="button">→</button>
+          <button class="btn hidden" id="cal-new-event-btn" type="button" style="width:auto;margin-left:10px;">+ New event</button>
+        </div>
+      </div>
+      <div class="calendar-grid" id="calendar-dow-row"></div>
+      <div class="calendar-grid" id="calendar-grid"></div>
+      <div class="day-events-panel">
+        <h2 id="cal-selected-day-label" style="font-size:14px; opacity:.75; font-weight:600;"></h2>
+        <div id="cal-day-events"></div>
+      </div>
+    </div>
+
+    <!-- NEW: News / announcements view -->
+    <div id="news-view" class="full-view hidden">
+      <div class="full-view-header">
+        <button class="icon-btn chat-back-btn" id="news-back-btn" title="Back">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <h1>News</h1>
+      </div>
+      <div class="news-compose hidden" id="news-compose">
+        <input id="news-title-input" type="text" placeholder="Headline…" />
+        <textarea id="news-body-input" placeholder="What's the update?"></textarea>
+        <label style="font-size:12.5px; opacity:.8; display:flex; gap:6px; align-items:center; margin-bottom:8px;">
+          <input type="checkbox" id="news-pin-checkbox" style="width:auto;" /> Pin to top
+        </label>
+        <p class="error-text" id="news-error"></p>
+        <button class="btn" id="news-post-btn" style="width:auto;">Post news</button>
+      </div>
+      <div id="news-feed"></div>
+    </div>
+  </main>
+</section>
+
+<!-- ---------------- New calendar event modal ---------------- -->
+<div class="modal-backdrop hidden" id="event-modal">
+  <div class="modal">
+    <h2>New event</h2>
+    <p class="subhead">Visible to everyone on the Calendar tab.</p>
+    <div class="field">
+      <label for="event-title">Title</label>
+      <input id="event-title" type="text" />
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label for="event-date">Date</label>
+        <input id="event-date" type="date" />
+      </div>
+      <div class="field">
+        <label for="event-time">Time (optional)</label>
+        <input id="event-time" type="time" />
+      </div>
+    </div>
+    <div class="field">
+      <label for="event-desc">Description (optional)</label>
+      <input id="event-desc" type="text" />
+    </div>
+    <p class="error-text" id="event-error"></p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="event-cancel" style="width:auto;">Cancel</button>
+      <button class="btn" id="event-save" style="width:auto;">Create event</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---------------- Avatar settings modal ---------------- -->
+<div class="modal-backdrop hidden" id="avatar-modal">
+  <div class="modal">
+    <h2>Your image</h2>
+    <p class="subhead">Shown to other members in the roster and in chat.</p>
+
+    <div class="tab-row">
+      <button class="tab-btn active" data-tab="presets">Choose an icon</button>
+      <button class="tab-btn" data-tab="upload">Upload a photo</button>
+    </div>
+
+    <div id="tab-presets">
+      <div class="preset-grid" id="preset-grid"></div>
+    </div>
+
+    <div id="tab-upload" class="hidden">
+      <div class="upload-row">
+        <div class="avatar avatar-xl" id="upload-preview"></div>
+        <input type="file" id="upload-input" accept="image/*" />
+      </div>
+      <p class="hint-text">JPG or PNG, under 350KB. It's resized to a small square avatar — no need to crop it yourself.</p>
+    </div>
+
+    <p class="error-text" id="avatar-error"></p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="avatar-cancel" style="width:auto;">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---------------- Create channel modal ---------------- -->
+<div class="modal-backdrop hidden" id="channel-modal">
+  <div class="modal">
+    <h2>New channel</h2>
+    <p class="subhead">Group channels: everyone added can post. Announcement channels: only you (or people you grant) can post — everyone else reads.</p>
+    <div class="field">
+      <label for="channel-name">Name</label>
+      <input id="channel-name" type="text" placeholder="e.g. Vindex Ops" />
+    </div>
+    <div class="field">
+      <label for="channel-icon">Symbol (optional)</label>
+      <input id="channel-icon" type="text" maxlength="16" placeholder="e.g. 🛠️ or VX" />
+    </div>
+    <div class="tab-row">
+      <button class="tab-btn active" data-channel-type="group">Group</button>
+      <button class="tab-btn" data-channel-type="announcement">Announcement</button>
+    </div>
+    <p class="roster-label" style="padding-left:0;">MEMBERS</p>
+    <div id="channel-member-picker" class="member-picker"></div>
+    <p class="error-text" id="channel-error"></p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="channel-cancel" style="width:auto;">Cancel</button>
+      <button class="btn" id="channel-create" style="width:auto;">Create channel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---------------- Manage channel modal ---------------- -->
+<div class="modal-backdrop hidden" id="manage-channel-modal">
+  <div class="modal">
+    <h2 id="manage-channel-title">Manage channel</h2>
+    <p class="subhead" id="manage-channel-subhead"></p>
+    <div class="form-row">
+      <input id="manage-channel-icon" type="text" maxlength="16" placeholder="Symbol (e.g. 🛠️ or VX)" />
+      <button class="btn btn-secondary" id="manage-channel-icon-save" style="width:auto;">Save symbol</button>
+    </div>
+    <div id="manage-channel-members"></div>
+    <p class="roster-label" style="padding-left:0;">ADD MEMBER</p>
+    <div class="form-row">
+      <select id="manage-channel-add-select"></select>
+      <button class="btn btn-secondary" id="manage-channel-add-btn" style="width:auto;">Add</button>
+    </div>
+    <p class="error-text" id="manage-channel-error"></p>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="manage-channel-delete" style="width:auto;">Delete channel</button>
+      <button class="btn btn-secondary" id="manage-channel-close" style="width:auto;">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ---------------- Admin screen (in-page, no /admin.html route) ---------------- -->
+<section id="admin-screen" class="hidden">
+  <div class="admin-wrap">
+    <div class="admin-top">
+      <h1 class="admin-title">𝐋𝐕𝐎 — admin</h1>
+      <button class="back-link" id="close-admin">← Back to chat</button>
+    </div>
+
+    <div class="card">
+      <h2>ADD A MEMBER</h2>
+      <div class="form-row">
+        <input id="new-username" placeholder="username" />
+        <input id="new-displayname" placeholder="display name (optional)" />
+      </div>
+      <div class="form-row">
+        <input id="new-password" placeholder="temporary password (8+ chars)" type="text" />
+        <button class="btn" id="create-btn" style="width:auto;">Add member</button>
+      </div>
+      <p class="hint-text">Give them the username and temporary password directly — they'll be asked to set their own password the first time they sign in.</p>
+      <p class="error-text" id="create-error"></p>
+    </div>
+
+    <div class="card">
+      <h2>MEMBERS</h2>
+      <div id="user-list"></div>
+    </div>
+
+    <div class="card">
+      <div class="admin-top" style="margin-bottom:14px;">
+        <h2 style="margin:0;">CHANNELS</h2>
+        <button class="btn btn-secondary" id="admin-new-channel" style="width:auto;">+ New channel</button>
+      </div>
+      <div id="admin-channel-list"></div>
+    </div>
+
+    <div class="card">
+      <h2>DIRECT MESSAGES</h2>
+      <p class="hint-text" style="margin-top:0;">Direct messages are stored in plaintext and are visible to admins. Click a thread to review its full message history.</p>
+      <div id="dm-thread-list"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ---------------- Admin DM viewer (read-only) ---------------- -->
+<div class="modal-backdrop hidden" id="admin-dm-viewer-modal">
+  <div class="modal admin-dm-viewer-modal">
+    <div class="chat-header" style="padding:0 0 12px;">
+      <div id="admin-dm-viewer-title" class="chat-peer-name"></div>
+      <button class="icon-btn" id="admin-dm-viewer-close" title="Close" style="margin-left:auto;">✕</button>
+    </div>
+    <p class="hint-text" style="margin-top:0;">Read-only admin view. This thread's messages are not editable here.</p>
+    <div class="messages" id="admin-dm-viewer-messages" style="max-height:60vh; overflow-y:auto;"></div>
+  </div>
+</div>
+
+<!-- ---------------- Message bubble template (cloned by app.js per message) ---------------- -->
+<template id="message-template">
+  <div class="message" data-message-id="" data-from="">
+    <div class="avatar avatar-sm message-avatar"></div>
+    <div class="message-body">
+      <div class="message-meta">
+        <span class="message-author"></span>
+        <span class="message-time"></span>
+      </div>
+      <div class="message-bubble">
+        <div class="message-attachments"></div>
+        <div class="message-text"></div>
+      </div>
+      <div class="message-reactions hidden"></div>
+    </div>
+    <div class="message-hover-actions">
+      <button class="icon-btn message-heart-btn" type="button" title="React with ❤️">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 20.5s-7.5-4.6-9.9-9.1C.6 8 2 4.6 5.3 3.9c2-.45 3.9.4 5 2 .8 1.15.9 1.15 1.7 0 1.1-1.6 3-2.45 5-2 3.3.7 4.7 4.1 3.2 7.5-2.4 4.5-9.9 9.1-9.9 9.1z"/>
+        </svg>
+      </button>
+      <button class="icon-btn message-react-btn" type="button" title="Add reaction">
+        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8" cy="8" r="6.3"/>
+          <path d="M5.4 8.8c.55.95 1.55 1.6 2.6 1.6s2.05-.65 2.6-1.6"/>
+          <circle cx="6" cy="6.6" r="0.55" fill="currentColor" stroke="none"/>
+          <circle cx="10" cy="6.6" r="0.55" fill="currentColor" stroke="none"/>
+          <path d="M15 11.5v4.4M12.8 13.7h4.4" stroke-width="1.6"/>
+        </svg>
+      </button>
+      <button class="icon-btn message-translate-btn" type="button" title="Translate">🌐</button>
+      <button class="icon-btn message-delete-btn hidden" type="button" title="Delete message (admin)">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-8 0v12a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V7"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</template>
+
+<!-- ---------------- Reaction pill template (cloned per emoji group under a message) ---------------- -->
+<template id="reaction-pill-template">
+  <button class="reaction-pill" type="button" data-emoji="">
+    <span class="reaction-emoji"></span>
+    <span class="reaction-count"></span>
+  </button>
+</template>
+
+<!-- ---------------- Reaction picker popup ---------------- -->
+<div class="reaction-picker hidden" id="reaction-picker">
+  <emoji-picker id="emoji-picker-el"></emoji-picker>
+</div>
+
+<!-- ---------------- Attachment bubble template (cloned by app.js per message) ---------------- -->
+<template id="attachment-bubble-template">
+  <div class="attachment-bubble" data-kind="">
+    <a class="attachment-image-link" href="#" target="_blank" rel="noopener">
+      <img class="attachment-image hidden" alt="" />
+    </a>
+    <div class="attachment-file hidden">
+      <span class="attachment-file-icon"></span>
+      <div class="attachment-file-meta">
+        <span class="attachment-file-name"></span>
+        <span class="attachment-file-size"></span>
+      </div>
+      <a class="attachment-download-link" href="#" download>⬇</a>
+    </div>
+    <audio class="attachment-audio hidden" controls></audio>
+    <video class="attachment-video hidden" controls></video>
+  </div>
+</template>
+
+<!-- ---------------- Lightbox for image/video attachments ---------------- -->
+<div class="modal-backdrop hidden" id="lightbox-modal">
+  <div class="modal lightbox-modal">
+    <button class="icon-btn lightbox-close" id="lightbox-close" title="Close">✕</button>
+    <img class="lightbox-image hidden" id="lightbox-image" alt="" />
+    <video class="lightbox-video hidden" id="lightbox-video" controls></video>
+  </div>
+</div>
+
+<!-- ---------------- GIF search modal (GIPHY) ---------------- -->
+<div class="modal-backdrop hidden" id="gif-modal">
+  <div class="modal gif-modal">
+    <h2>Send a GIF</h2>
+    <div class="field">
+      <input id="gif-search-input" type="text" placeholder="Search GIPHY…" />
+    </div>
+    <div class="gif-grid" id="gif-grid"></div>
+    <p class="error-text" id="gif-error"></p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="gif-cancel" style="width:auto;">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js?v=20260908c"></script>
+</body>
+</html>
