@@ -1,17 +1,17 @@
 {
-  "name": "lvo-online",
-  "version": "1.0.0",
+  "name": "lvo-cloud",
+  "version": "3.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node server.js",
-    "start": "node server.js",
-    "build": "echo 'No build required'"
+    "dev": "wrangler dev",
+    "db:create": "wrangler d1 create lvo-cloud-db",
+    "db:migrate": "wrangler d1 execute lvo-cloud-db --remote --file=./schema.sql",
+    "db:migrate:local": "wrangler d1 execute lvo-cloud-db --local --file=./schema.sql",
+    "db:seed": "wrangler d1 execute lvo-cloud-db --remote --file=./seed.sql",
+    "deploy": "wrangler deploy"
   },
-  "dependencies": {
-    "cookie-parser": "^1.4.7",
-    "express": "^4.21.2",
-    "otplib": "^13.5.0",
-    "qrcode": "^1.5.4"
+  "devDependencies": {
+    "wrangler": "^4.0.0"
   }
 }
