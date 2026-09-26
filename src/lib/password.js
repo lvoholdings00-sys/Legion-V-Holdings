@@ -1,70 +1,68 @@
-import * as authMe from './routes/auth-me.js';
-import * as authLoginStep1 from './routes/auth-login-step1.js';
-import * as authMfaConfirmSetup from './routes/auth-mfa-confirm-setup.js';
-import * as authMfaVerify from './routes/auth-mfa-verify.js';
-import * as authLogout from './routes/auth-logout.js';
-import * as adminUsers from './routes/admin-users.js';
-import * as adminUserById from './routes/admin-user-by-id.js';
-import * as adminUserResetMfa from './routes/admin-user-reset-mfa.js';
-import * as adminData from './routes/admin-data.js';
-import * as adminMessageById from './routes/admin-message-by-id.js';
-import * as adminTicketById from './routes/admin-ticket-by-id.js';
-import * as chatMessages from './routes/chat-messages.js';
-import * as supportTickets from './routes/support-tickets.js';
-import * as systemStatus from './routes/system-status.js';
-import * as systemStatusUpdate from './routes/system-status-update.js';
+// PBKDF2-SHA256 password hashing using Web Crypto (works natively in
+// Cloudflare Workers and in modern Node via globalThis.crypto.subtle).
+// Stored format: pbkdf2$<iterations>$<saltHex>$<hashHex>
 
-// Each entry: a URLPattern for the path, plus one handler per HTTP method it supports.
-const routes = [
-  { pattern: new URLPattern({ pathname: '/api/auth/me' }), GET: authMe.onRequestGet },
-  { pattern: new URLPattern({ pathname: '/api/auth/login-step1' }), POST: authLoginStep1.onRequestPost },
-  { pattern: new URLPattern({ pathname: '/api/auth/mfa-confirm-setup' }), POST: authMfaConfirmSetup.onRequestPost },
-  { pattern: new URLPattern({ pathname: '/api/auth/mfa-verify' }), POST: authMfaVerify.onRequestPost },
-  { pattern: new URLPattern({ pathname: '/api/auth/logout' }), POST: authLogout.onRequestPost },
+const ITERATIONS = 100000;
+const HASH_BITS = 256;
 
-  { pattern: new URLPattern({ pathname: '/api/admin/users' }), GET: adminUsers.onRequestGet, POST: adminUsers.onRequestPost },
-  { pattern: new URLPattern({ pathname: '/api/admin/users/:id' }), PUT: adminUserById.onRequestPut, DELETE: adminUserById.onRequestDelete },
-  { pattern: new URLPattern({ pathname: '/api/admin/users/:id/reset-mfa' }), PUT: adminUserResetMfa.onRequestPut },
-  { pattern: new URLPattern({ pathname: '/api/admin/data' }), GET: adminData.onRequestGet },
-  { pattern: new URLPattern({ pathname: '/api/admin/messages/:id' }), DELETE: adminMessageById.onRequestDelete },
-  { pattern: new URLPattern({ pathname: '/api/admin/tickets/:id' }), PUT: adminTicketById.onRequestPut, DELETE: adminTicketById.onRequestDelete },
+function toHex(buffer) {
+  return Array.from(new Uint8Array(buffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
 
-  { pattern: new URLPattern({ pathname: '/api/chat/messages' }), GET: chatMessages.onRequestGet, POST: chatMessages.onRequestPost },
-  { pattern: new URLPattern({ pathname: '/api/support/tickets' }), GET: supportTickets.onRequestGet, POST: supportTickets.onRequestPost },
-
-  { pattern: new URLPattern({ pathname: '/api/system-status' }), GET: systemStatus.onRequestGet },
-  { pattern: new URLPattern({ pathname: '/api/system-status/:name' }), PUT: systemStatusUpdate.onRequestPut }
-];
-
-export default {
-  async fetch(request, env) {
-    const url = new URL(request.url);
-
-    for (const route of routes) {
-      const match = route.pattern.exec(url);
-      const handler = match && route[request.method];
-      if (handler) {
-        try {
-          return await handler({ request, env, params: match.pathname.groups });
-        } catch (err) {
-          console.error('Route error:', err);
-          return new Response(JSON.stringify({ error: 'Internal server error' }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        }
-      }
-    }
-
-    // Not an /api/* route we handle — let static assets serving take it
-    // (in practice the assets binding already intercepts these before the
-    // Worker runs; this is only reached for an unmatched /api/* path).
-    if (url.pathname.startsWith('/api/')) {
-      return new Response(JSON.stringify({ error: 'Not found' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-    return env.ASSETS.fetch(request);
+function fromHex(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
   }
-};
+  return bytes;
+}
+
+async function deriveHex(password, saltBytes, iterations) {
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password),
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt: saltBytes, iterations, hash: 'SHA-256' },
+    keyMaterial,
+    HASH_BITS
+  );
+  return toHex(bits);
+}
+
+export async function hashPassword(password) {
+  const saltBytes = crypto.getRandomValues(new Uint8Array(16));
+  const hashHex = await deriveHex(password, saltBytes, ITERATIONS);
+  return `pbkdf2$${ITERATIONS}$${toHex(saltBytes)}$${hashHex}`;
+}
+
+// Returns true/false. Also treats a plain, unhashed legacy value as
+// non-matching once migrated — see verifyPassword's isHashed check below
+// if you need a migration path for existing plaintext rows.
+export async function verifyPassword(password, stored) {
+  if (!stored || typeof stored !== 'string' || !stored.startsWith('pbkdf2$')) {
+    return false;
+  }
+  const [, iterStr, saltHex, hashHex] = stored.split('$');
+  const iterations = parseInt(iterStr, 10);
+  if (!iterations || !saltHex || !hashHex) return false;
+
+  const computedHex = await deriveHex(password, fromHex(saltHex), iterations);
+
+  // Constant-time comparison.
+  if (computedHex.length !== hashHex.length) return false;
+  let diff = 0;
+  for (let i = 0; i < computedHex.length; i++) {
+    diff |= computedHex.charCodeAt(i) ^ hashHex.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+export function isHashed(value) {
+  return typeof value === 'string' && value.startsWith('pbkdf2$');
+}
