@@ -1,4 +1,4 @@
-name = "lvo-cloud"
+name = "legion-v-holdings"
 main = "src/index.js"
 compatibility_date = "2026-09-25"
 
@@ -9,4 +9,4 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "lvo-cloud-db"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "947653b1-6972-4790-9c66-c7ac7a244f19"
