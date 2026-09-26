@@ -1,5 +1,6 @@
 import { requireAdmin } from '../lib/auth.js';
 import { rowToUser, safeUser, logAudit, json } from '../lib/db.js';
+import { hashPassword } from '../lib/password.js';
 
 export async function onRequestGet({ request, env }) {
   const { error } = await requireAdmin(request, env);
@@ -27,7 +28,7 @@ export async function onRequestPost({ request, env }) {
   const newUser = {
     id: 'usr-' + Date.now(),
     username: clean,
-    password: password.trim(),
+    password: await hashPassword(password.trim()),
     role: role || 'operator',
     clearance: clearance || 'LEVEL-2 (RESTRICTED)',
     status: 'ACTIVE',

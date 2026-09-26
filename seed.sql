@@ -1,5 +1,9 @@
--- Fill in your real credentials below, then run:
---   npx wrangler d1 execute lvo-cloud-db --remote --file=./seed.sql
+-- DO NOT put real credentials in this file — it's tracked in git.
+-- Instead:
+--   1. Copy this file to seed.local.sql (already gitignored)
+--   2. Generate a password hash:  node scripts/hash-password.mjs "your-real-password"
+--   3. Paste the printed pbkdf2$... string in place of REPLACE_*_PASSWORD below
+--   4. Run:  npx wrangler d1 execute lvo-cloud-db --remote --file=./seed.local.sql
 --
 -- Re-running is safe: it overwrites the row for the same username.
 -- Each account will be prompted to scan a fresh MFA QR code on first login.

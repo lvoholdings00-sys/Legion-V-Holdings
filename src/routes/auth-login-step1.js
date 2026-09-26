@@ -1,5 +1,6 @@
 import { generateSecret, generateURI } from '../lib/totp.js';
 import { rowToUser, logAudit, json } from '../lib/db.js';
+import { verifyPassword } from '../lib/password.js';
 
 export async function onRequestPost({ request, env }) {
   const { username, password } = await request.json();
@@ -18,7 +19,7 @@ export async function onRequestPost({ request, env }) {
     return json({ error: 'ACCESS SUSPENDED: Account is deactivated by Master Administrator.' }, { status: 403 });
   }
 
-  if (user.password !== password) {
+  if (!(await verifyPassword(password, user.password))) {
     await logAudit(env, 'LOGIN_FAILED', username, 'Incorrect security passphrase');
     return json({ error: 'ACCESS DENIED: Invalid security passphrase.' }, { status: 401 });
   }

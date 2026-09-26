@@ -1,5 +1,6 @@
 import { requireAdmin } from '../lib/auth.js';
 import { rowToUser, safeUser, logAudit, json } from '../lib/db.js';
+import { hashPassword } from '../lib/password.js';
 
 export async function onRequestPut({ request, env, params }) {
   const { error, user: admin } = await requireAdmin(request, env);
@@ -21,7 +22,7 @@ export async function onRequestPut({ request, env, params }) {
     role: role && user.username !== 'admin' ? role : user.role,
     clearance: clearance || user.clearance,
     notes: notes !== undefined ? notes : user.notes,
-    password: password && password.trim() ? password.trim() : user.password
+    password: password && password.trim() ? await hashPassword(password.trim()) : user.password
   };
 
   await env.DB.prepare(
